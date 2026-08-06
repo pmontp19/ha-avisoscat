@@ -68,8 +68,9 @@ COMARQUES_TOPOJSON_URL = (
 #
 # Adaptive with the public source: slow when nothing is happening, faster only
 # while some episode is open (the only situation where the violent-weather
-# nowcast matters). The floor is dictated by the source's own
-# `cache-control: max-age=600`; polling faster returns the same bytes.
+# nowcast matters). The floor is ours, not the source's: the primary page sends
+# `cache-control: max-age=180` (measured 2026-08-06, see above), so 10 minutes is
+# deliberately several times more conservative than the source asks for.
 # ---------------------------------------------------------------------------
 
 DEFAULT_SCAN_INTERVAL_IDLE_MINUTES = 30

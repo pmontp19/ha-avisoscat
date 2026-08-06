@@ -345,6 +345,60 @@ def test_the_richest_call_wins_when_a_page_renders_the_call_twice() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Trap: the marker also appears outside a call
+# ---------------------------------------------------------------------------
+
+
+def _page_naming_the_call_in_prose(prose: str) -> str:
+    """A readable one-episode page whose prose also names the call, before it."""
+    html = _page(
+        call_body=(
+            "        episodisPreavisos: [],\n"
+            f"        avisos: [{_episodi(meteor='Neu')}]\n"
+        )
+    )
+    return html.replace(
+        "<div id='mapaWidget'></div>",
+        f"<p>{prose}</p>\n<div id='mapaWidget'></div>",
+        1,
+    )
+
+
+def test_an_unbalanced_marker_in_prose_before_the_call_does_not_hide_it() -> None:
+    """Page prose naming the call must never become the anchor for the real one.
+
+    A `Meteocat.avisosSMP(` occurrence outside a call need not balance (the real
+    captured fixture has one, in its provenance comment). Taking such an occurrence
+    as a call makes its `(` the depth origin for everything after it, so every
+    top-level key of the real call sits one level too deep and a perfectly readable
+    page fails as unreadable. Three of those and the coordinator declares the
+    service degraded while the source is fine.
+    """
+    html = _page_naming_the_call_in_prose("La crida Meteocat.avisosSMP( del giny")
+
+    avisos, preavisos = extract_smp_payload(html)
+
+    assert [w["meteor"] for w in _warnings(avisos)] == ["Neu"]
+    assert preavisos == []
+
+
+def test_a_prose_marker_closed_after_the_real_call_does_not_swallow_it() -> None:
+    """The same trap when the stray occurrence *does* balance, just too late.
+
+    Here the stray `(` closes on a `)` sitting after the real call, so its bracket
+    group spans the real call instead of stopping short of it. Resuming the search
+    past the span rather than past the marker would skip the real call entirely.
+    """
+    html = _page_naming_the_call_in_prose(
+        "Consulteu Meteocat.avisosSMP( al giny"
+    ).replace("</body>", "<p>fi de la nota)</p>\n</body>", 1)
+
+    avisos, _ = extract_smp_payload(html)
+
+    assert [w["meteor"] for w in _warnings(avisos)] == ["Neu"]
+
+
+# ---------------------------------------------------------------------------
 # Trap: a quiet page is not an error (docs/01-data-sources.md §3.2)
 # ---------------------------------------------------------------------------
 
@@ -363,8 +417,9 @@ def test_a_page_with_no_open_episode_returns_two_empty_lists(
     """No warning open is the normal state of a quiet day, not a failure.
 
     All three encodings collapse to the same empty answer, so the caller gets one
-    falsy result to test instead of three shapes: `smp.py` decides whether to try
-    the fallback page on exactly this.
+    falsy result to test instead of three shapes. Falsy means quiet, not broken:
+    what sends `smp.py` to the fallback page is a fetch or parse failure
+    (docs/04-architecture.md §3).
     """
     html = _page(
         call_body=(

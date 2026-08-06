@@ -97,17 +97,36 @@ reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` qu
 
 1. `GET` amb `Accept-Encoding: gzip` a `SMP_PAGE_URL`
    (`https://www.meteo.cat/observacions/radar`, ~57 KB gzip), amb
-   `https://www.meteo.cat/` com a *fallback* si l'extracció no troba episodis.
+   `https://www.meteo.cat/` com a *fallback* **només si la pàgina primària falla**:
+   error de descàrrega o `SmpParseError`. Un resultat buit **no** activa el
+   *fallback*: cap episodi obert és la resposta normal d'un dia tranquil i, com que les
+   dues pàgines retornen el mateix payload byte a byte, el *fallback* no pot aportar
+   episodis que la primària no tingués ja (`docs/captures/smp-page-choice-2026-08-06.md`).
+   El *fallback* hi és per disponibilitat, no per completesa.
 2. Localitzar `Meteocat.avisosSMP(`.
 3. A partir d'aquell offset, per a cada clau (`avisos:`, `episodisPreavisos:`), extreure
    l'array amb un **comptador de claudàtors equilibrat** que ignori els que van dins de
    cadenes. Res de regex greedy: el payload conté `[` i `]` dins de `comentari`.
-4. Descartar els arrays buits (l'objecte `opcions` també té una clau `avisos`, buida) i
-   quedar-se amb el primer que contingui episodis.
+4. Les claus es llegeixen **només al primer nivell** de l'objecte d'arguments de la
+   crida (una comprovació de profunditat), de manera que ni la clau `avisos` buida de
+   l'objecte `opcions` ni la clau `avisos` que porta cada episodi del payload no hi
+   poden entrar: queden estructuralment excloses en lloc de només descartades. Entre
+   els candidats resultants es tria el **més ric**, no el primer que contingui
+   episodis: la portada renderitza la crida dues vegades (un visor d'1 dia i un giny
+   de 3 dies) i el joc d'1 dia és un subconjunt estricte de l'altre, per tant
+   quedar-se amb el primer descartaria en silenci els avisos de demà
+   (`docs/captures/smp-page-choice-2026-08-06.md`). Un candidat sense cap episodi es
+   col·lapsa a `[]`, de manera que `[]`, `[[]]` i `[[],[],[]]` donen la mateixa
+   resposta buida.
 5. `json.loads` → `models.parse_snapshot()`.
 
-Si el pas 2 o el 4 fallen, es llança `SmpParseError` — mai una excepció crua. Tres
-fallades seguides disparen `avisoscat_service_degraded` i una *repair issue*.
+Es llança `SmpParseError`, mai una excepció crua, quan el marcatge no es pot llegir:
+no hi ha cap crida `Meteocat.avisosSMP(`, no hi ha clau `avisos` al primer nivell de la
+crida, o el seu valor no descodifica. Un resultat buit del pas 4 **no** és una fallada:
+és el dia tranquil. Una clau `episodisPreavisos` absent tampoc no ho és: avisa i degrada
+a `[]`, perquè perdre els preavisos (una ajuda de planificació a 3 dies) seria un mal
+motiu per descartar avisos vigents ara mateix. Tres fallades seguides disparen
+`avisoscat_service_degraded` i una *repair issue*.
 
 ### `ApiKeySource`
 

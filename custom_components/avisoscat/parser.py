@@ -70,72 +70,87 @@ class SmpParseError(Exception):
     """
 
 
+class _BracketWalk:
+    """A resumable left-to-right walk that counts brackets outside strings.
+
+    Both questions this module asks of the page are answered by the same walk:
+    where a bracket group closes, and how deep a position sits. Keeping one
+    resumable walk per call span makes extraction a single pass over the page
+    instead of one rescan per candidate key.
+
+    Characters inside a quoted string are skipped, which is the whole point: the
+    `]` in a `comentari` such as "ratxes de vent [rafegues]" must not close the
+    array. Both JavaScript quote styles are honoured and a backslash escapes the
+    next character.
+    """
+
+    __slots__ = ("_escaped", "_quote", "_text", "depth", "position")
+
+    def __init__(self, text: str, start: int) -> None:
+        self._text = text
+        self._quote: str | None = None
+        self._escaped = False
+        self.position = start
+        self.depth = 0
+
+    @property
+    def in_string(self) -> bool:
+        """Whether the position reached sits inside a quoted string value.
+
+        A `comentari` that happens to read "avisos: [...]" is rejected on this: it
+        is text, not a key.
+        """
+        return self._quote is not None
+
+    def advance(self, end: int, *, stop_when_closed: bool = False) -> bool:
+        """Walk up to `end`, keeping the depth reached; may only move forward.
+
+        With `stop_when_closed` the walk stops just past the character that brings
+        the depth back to 0 and returns `True`; `False` then means the group never
+        closed before `end`.
+        """
+        text = self._text
+        quote = self._quote
+        escaped = self._escaped
+        depth = self.depth
+        position = self.position
+        closed = False
+        while position < end:
+            char = text[position]
+            position += 1
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in _QUOTES:
+                quote = char
+            elif char in _OPENERS:
+                depth += 1
+            elif char in _CLOSERS:
+                depth -= 1
+                if stop_when_closed and depth == 0:
+                    closed = True
+                    break
+        self._quote = quote
+        self._escaped = escaped
+        self.depth = depth
+        self.position = position
+        return closed
+
+
 def _scan_balanced(text: str, start: int) -> int | None:
     """Return the index just past the bracket group opening at `start`.
-
-    A plain depth counter over `[](){}`, with the one addition that is the point
-    of the function: characters inside a quoted string are skipped, so the `]` in
-    a `comentari` such as "ratxes de vent [rafegues]" does not close the array.
-    Both JavaScript quote styles are honoured and a backslash escapes the next
-    character.
 
     `None` means the group never closed before the end of the text, i.e. a
     truncated page. The caller decides what to do about that; guessing where the
     array ended would silently invent data.
     """
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    for index in range(start, len(text)):
-        char = text[index]
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            continue
-        if char in _QUOTES:
-            quote = char
-        elif char in _OPENERS:
-            depth += 1
-        elif char in _CLOSERS:
-            depth -= 1
-            if depth == 0:
-                return index + 1
-    return None
-
-
-def _depth_at(text: str, start: int, index: int) -> int | None:
-    """Bracket depth of `index`, counted from `start`; `None` if inside a string.
-
-    This is what makes key lookup structural instead of textual: the payload
-    contains an `"avisos"` key on every single episode and the `opcions` object
-    has one too, and both live deeper than the key we want. `None` for a position
-    inside a string value means a `comentari` that happens to read
-    "avisos: [...]" cannot be mistaken for a key either.
-    """
-    depth = 0
-    quote: str | None = None
-    escaped = False
-    for position in range(start, index):
-        char = text[position]
-        if quote is not None:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            continue
-        if char in _QUOTES:
-            quote = char
-        elif char in _OPENERS:
-            depth += 1
-        elif char in _CLOSERS:
-            depth -= 1
-    return None if quote is not None else depth
+    walk = _BracketWalk(text, start)
+    return walk.position if walk.advance(len(text), stop_when_closed=True) else None
 
 
 def _call_spans(html: str) -> list[tuple[int, int]]:
@@ -145,14 +160,34 @@ def _call_spans(html: str) -> list[tuple[int, int]]:
     the call twice (a 1-day front-page visor and a 3-day widget) and the two do
     not carry the same episodes. Each span starts at the `(` of the call, which is
     the origin the depth check counts from.
+
+    Not every occurrence of the marker is a call: page prose, a comment or a help
+    text can merely name it, and such an occurrence need not balance its brackets.
+    So the search always resumes just past the marker rather than past the span it
+    produced, and a span running to the end of the page is only accepted for the
+    last occurrence. Otherwise one stray mention would become the depth origin for
+    the rest of the page and every real call after it would be read one level too
+    deep, turning a perfectly readable page into a parse failure.
     """
     spans: list[tuple[int, int]] = []
     search_from = 0
     while (found := html.find(_CALL_MARKER, search_from)) != -1:
         # The marker ends on the `(` itself, which is where the scan must start.
         open_paren = found + len(_CALL_MARKER) - 1
+        search_from = found + len(_CALL_MARKER)
         end = _scan_balanced(html, open_paren)
-        if end is None:
+        if end is not None:
+            spans.append((open_paren, end))
+        elif html.find(_CALL_MARKER, search_from) != -1:
+            # Unbalanced with another occurrence still to come: prose naming the
+            # call, or a call this scan cannot follow. Either way the reading to
+            # the end of the page below would only hide the occurrences after it.
+            _LOGGER.warning(
+                "The Meteocat.avisosSMP( occurrence at offset %d is never closed "
+                "and is not the last one; skipping it",
+                found,
+            )
+        else:
             # A truncated final call is still scanned to the end of the page: the
             # keys we want come early in the argument list, so a cut-off tail
             # often still yields them.
@@ -162,9 +197,6 @@ def _call_spans(html: str) -> list[tuple[int, int]]:
                 found,
             )
             spans.append((open_paren, len(html)))
-            break
-        spans.append((open_paren, end))
-        search_from = end
     return spans
 
 
@@ -181,10 +213,14 @@ def _decode_arrays(
     decoded: list[list[Any]] = []
     found_any = False
     for start, end in spans:
+        # Matches arrive in increasing order, so one walk resumed from the previous
+        # match answers the depth of all of them in a single pass.
+        walk = _BracketWalk(html, start)
         for match in key.finditer(html, start, end):
-            if _depth_at(html, start, match.start()) != _ARGUMENT_DEPTH:
-                # A nested `avisos` key: the `opcions` decoy, or the one every
-                # episode of the payload carries.
+            walk.advance(match.start())
+            if walk.in_string or walk.depth != _ARGUMENT_DEPTH:
+                # Prose that reads like a key, or a nested `avisos` key: the
+                # `opcions` decoy, or the one every episode of the payload carries.
                 continue
             found_any = True
             value_at = match.end()
@@ -244,9 +280,12 @@ def _pick_richest(candidates: list[list[Any]]) -> list[Any]:
     episode open, the richest candidate of both candidate pages is the very same
     payload (docs/captures/smp-page-choice-2026-08-06.md).
 
-    A candidate with nothing in it collapses to `[]`, so that a quiet page is
-    falsy for the caller: `smp.py` decides whether to try the fallback page by
-    asking whether the extraction produced episodes, and `[[]]` would answer yes.
+    A candidate with nothing in it collapses to `[]`, so a quiet page is falsy for
+    the caller and there is one shape to test instead of three. Falsy is not a
+    reason to go and fetch the fallback page: since both pages carry the same
+    payload, the fallback is there for availability only, so what triggers it is a
+    fetch or parse failure of the primary page, not an empty result
+    (docs/04-architecture.md §3).
     """
     richest = max(candidates, key=_content_size, default=[])
     return richest if _content_size(richest) else []
