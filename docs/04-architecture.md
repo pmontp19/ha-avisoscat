@@ -39,7 +39,7 @@ ha-avisoscat/
 │   │   ├── smp_episodis_empty.json
 │   │   ├── smp_preavisos_sample.json
 │   │   ├── smp_temps_violent_sample.json
-│   │   └── comarques_topo_sample.json
+│   │   └── comarquesAmbMar.json          # TopoJSON real capturat, només per als tests
 │   └── test_*.py
 ├── docs/01-…05-…md                 # aquests documents
 ├── .github/workflows/{ci,validate}.yml
@@ -251,16 +251,23 @@ Taula estàtica de 55 entrades (43 terrestres + 12 marítimes) **generada un cop
 n'hi ha. Zero peticions en temps d'execució i zero dependències.
 
 La geometria per a *point-in-polygon* **només** cal al config flow. Per no incrustar 58 KB
-de TopoJSON al repositori ni afegir `shapely`:
+de TopoJSON al component distribuït ni afegir `shapely`:
 
 1. El config flow descarrega `comarquesAmbMar.json` una vegada, en el moment de resoldre la
    ubicació.
 2. Decodifica el TopoJSON (aritmètica d'arcs, ~40 línies) i fa ray casting pur.
-3. Si la descàrrega falla, cau al desplegable manual de comarques — el flux mai queda
-   bloquejat.
+3. `async_resolve_comarca()` **no llança mai**: retorna un `ComarcaResolution` amb
+   `id_comarca`, o amb `error` (`cannot_connect`, `invalid_geometry`,
+   `location_outside_catalonia`, que són alhora les claus d'error del config flow). Si la
+   descàrrega o la descodificació falla, el flux cau al desplegable manual de comarques i
+   mai queda bloquejat.
 
 Un `id` que no és a la taula retorna `f"Comarca {id}"` (Moianès i Lluçanès són recents; en
 poden aparèixer més).
+
+La captura real del TopoJSON sí que és al repositori, a
+`tests/fixtures/comarquesAmbMar.json`: és dada de test (`CONTRIBUTING.md` exigeix fixtures
+reals i zero xarxa), no geometria distribuïda amb el component.
 
 ---
 
@@ -484,7 +491,7 @@ Idèntic a `ha-incendiscat`: `ci.yml` (`ruff check .`, `ruff format --check .`,
 | **Sondeig adaptatiu 30/10 min** | 10 min només cal per al nowcast convectiu; la resta de l'any seria triplicar la càrrega sobre un servei públic per res |
 | Events al bus a més de binary sensors | Patró event-driven de HA; "acaba d'entrar un avís de vent" és un event, no un estat |
 | Multi-entrada (N comarques) | Casa, feina, família. `geosphere_austria_warnings` fa el mateix amb municipis |
-| Taula de comarques incrustada, geometria només al config flow | Zero peticions en runtime, zero dependències, 58 KB fora del repo |
+| Taula de comarques incrustada, geometria només al config flow | Zero peticions en runtime, zero dependències, 58 KB fora del component (§6) |
 | **CECAT en una integració separada (`ha-cecat`)** | Àmbit territorial incompatible (Catalunya sencera vs comarca: N entrades donarien N còpies del mateix INUNCAT), abast natural molt més gran (SISMICAT, TRANSCAT…) i precedent `nina` / `dwd_weather_warnings` a HA core. Detall a `02-existing-integrations.md` §8 |
 | `requirements: []` | Menys superfície de trencament amb els canvis de HA. Mateix criteri que `ha-incendiscat` |
 | Codi en anglès, UI en català | Convenció HA + context d'ús |

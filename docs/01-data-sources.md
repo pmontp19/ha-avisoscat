@@ -451,7 +451,7 @@ Els preavisos tenen una **forma diferent** (sense comarca ni franges):
 | 4 | Un episodi pot portar **diversos `avisos`** (emissions successives del mateix avís) | Desduplicar per (meteor, tipus) quedant-se el `dataEmisio` més recent; si empaten, el grau més alt |
 | 5 | `meteor.nom` i els llindars són **text lliure en català** | Mapatge case-insensitive amb fallback `unknown` + warning; no `KeyError`, no `raise` |
 | 6 | `idMeteor` és **`null`** al payload públic | No dependre'n mai com a clau |
-| 7 | `idComarca` pot ser una comarca nova o una zona marítima | Nom `desconeguda (id)` per defecte, sense petar |
+| 7 | `idComarca` pot ser una comarca nova o una zona marítima | `comarques.nom(id)` retorna un nom llegible per defecte, amb warning i sense petar (§6 de [`04-architecture.md`](04-architecture.md)) |
 | 8 | La darrera franja es diu **`"18-00"`** i no `"18-24"` | Fer servir el valor del JSON |
 | 9 | El literal del tipus té variants històriques (`"Avís d'Observació"`, `"Avís temps violent"`) | Normalitzar amb prefixos/`casefold`, mai igualtat estricta |
 | 10 | `comentari`, `llindar*`, `meteor.nom`, `descripcio` (CECAT) són **text extern no fiable** | Mai `allow_html`, mai interpolació HTML directa (regla de `CLAUDE.md`) |
