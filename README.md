@@ -3,7 +3,8 @@
 Integració de Home Assistant per als **avisos de temps sever del Meteocat** (Situació
 Meteorològica de Perill, SMP) a Catalunya.
 
-> 🚧 **En construcció.** El disseny és a [`docs/`](docs/); el codi encara no hi és.
+> 🚧 **En construcció.** De moment només hi ha l'esquelet: es carrega a Home Assistant
+> però encara no publica cap entitat. El disseny és a [`docs/`](docs/).
 
 Segueix els avisos SMP que afecten la teva comarca i els converteix en entitats i events
 per a automacions, distingint l'avís **anunciat** (emès amb hores o dies d'antelació) de

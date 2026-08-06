@@ -44,8 +44,9 @@ we deliberately reach `1.0.0`, a `fix!`/`BREAKING CHANGE` bumps **minor**, not m
 3. Never edit those two version fields by hand: `release-please` is the only source of truth.
 4. Merging that PR creates the `vX.Y.Z` tag and the GitHub Release automatically.
 
-Dependabot opens weekly PRs for `github-actions` and `pip`, excluding `homeassistant` and
-`pytest-homeassistant-custom-component`, which are bumped by hand alongside HA core.
+Dependabot opens weekly PRs for `github-actions` and `pip`. The pinned test stack is
+excluded and bumped by hand instead; the exact list and the reason for each entry live in
+`.github/dependabot.yml`.
 
 ## Tests
 

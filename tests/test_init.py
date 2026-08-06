@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from custom_components.avisoscat import PLATFORMS, const
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.loader import async_get_integration
 
 from .conftest import FakeClock, make_config_entry
 
@@ -23,6 +24,40 @@ async def test_setup_and_unload_entry(hass: HomeAssistant) -> None:
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_two_comarques_load_at_the_same_time(hass: HomeAssistant) -> None:
+    """Multi-entry by design: one config entry per comarca, both loaded.
+
+    `single_config_entry` is enforced by the config flow, not by setup, so
+    `test_manifest_as_home_assistant_loads_it` guards the manifest side.
+    """
+    osona = make_config_entry(id_comarca=24)
+    bages = make_config_entry(id_comarca=7)
+    osona.add_to_hass(hass)
+    bages.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(osona.entry_id)
+    await hass.async_block_till_done()
+
+    assert osona.state is ConfigEntryState.LOADED
+    assert bages.state is ConfigEntryState.LOADED
+    assert len(hass.config_entries.async_entries(const.DOMAIN)) == 2
+
+
+async def test_manifest_as_home_assistant_loads_it(hass: HomeAssistant) -> None:
+    """Home Assistant's own loader reports the documented manifest contract."""
+    integration = await async_get_integration(hass, const.DOMAIN)
+
+    assert integration.domain == const.DOMAIN
+    assert integration.integration_type == "service"
+    assert integration.iot_class == "cloud_polling"
+    assert integration.config_flow is True
+    assert integration.requirements == []
+    assert integration.single_config_entry is False
+    # `integration.quality_scale` always reports "custom" for a custom
+    # integration, so the declared scale is read from the parsed manifest.
+    assert integration.manifest["quality_scale"] == "silver"
 
 
 def test_no_platforms_yet() -> None:
