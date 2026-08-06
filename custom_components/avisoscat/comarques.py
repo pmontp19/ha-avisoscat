@@ -59,7 +59,7 @@ class Comarca:
     @property
     def es_maritima(self) -> bool:
         """Whether this zone is a stretch of sea rather than land."""
-        return FIRST_MARITIME_ID <= self.id_comarca <= LAST_MARITIME_ID
+        return es_maritima(self.id_comarca)
 
 
 # Generated from docs/captures/comarques-idcomarca-2026-08-05.json. Catalan
@@ -128,6 +128,12 @@ COMARQUES: Final[Mapping[int, Comarca]] = {
 }
 
 
+# Ids already reported as unknown. `nom()` is the name source for entities and
+# is recomputed on every coordinator refresh, so the warning is worth one line
+# per id, not one line per refresh forever.
+_warned_unknown_ids: set[int] = set()
+
+
 def nom(id_comarca: int) -> str:
     """Return the name of a zone, or a readable placeholder for unknown ids.
 
@@ -137,10 +143,12 @@ def nom(id_comarca: int) -> str:
     """
     comarca = COMARQUES.get(id_comarca)
     if comarca is None:
-        _LOGGER.warning(
-            "Unknown comarca id %s; the territorial table may be outdated",
-            id_comarca,
-        )
+        if id_comarca not in _warned_unknown_ids:
+            _warned_unknown_ids.add(id_comarca)
+            _LOGGER.warning(
+                "Unknown comarca id %s; the territorial table may be outdated",
+                id_comarca,
+            )
         return f"Comarca {id_comarca}"
     return comarca.nom
 
@@ -174,7 +182,7 @@ class ResolutionError(StrEnum):
 
     CANNOT_CONNECT = "cannot_connect"
     INVALID_GEOMETRY = "invalid_geometry"
-    OUTSIDE_CATALONIA = "outside_catalonia"
+    LOCATION_OUTSIDE_CATALONIA = "location_outside_catalonia"
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +250,19 @@ def _iter_polygons(geometry: Mapping[str, Any]) -> Iterator[Sequence[Sequence[in
         yield from geometry.get("arcs", [])
 
 
+def _decode_polygon(polygon: Sequence[Sequence[int]], arcs: Sequence[Ring]) -> Polygon:
+    """Stitch one polygon, dropping the rings that carry no point.
+
+    A geometry whose `arcs` member is missing or empty stitches to nothing. Such
+    a polygon can never contain a coordinate, so it must not survive decoding:
+    an entry made only of empty rings would look like usable geometry and turn
+    every location into "outside Catalonia".
+    """
+    return [
+        ring for ring in (_stitch(ring_arcs, arcs) for ring_arcs in polygon) if ring
+    ]
+
+
 def decode_topology(payload: Mapping[str, Any]) -> Geometries:
     """Decode `comarquesAmbMar.json` into rings keyed by comarca id.
 
@@ -258,8 +279,11 @@ def decode_topology(payload: Mapping[str, Any]) -> Geometries:
         if not isinstance(raw_id, int):
             continue
         polygons = [
-            [_stitch(ring, arcs) for ring in polygon]
-            for polygon in _iter_polygons(geometry)
+            rings
+            for rings in (
+                _decode_polygon(polygon, arcs) for polygon in _iter_polygons(geometry)
+            )
+            if rings
         ]
         if polygons:
             geometries.setdefault(raw_id, []).extend(polygons)
@@ -286,6 +310,23 @@ def _point_in_polygon(longitude: float, latitude: float, polygon: Polygon) -> bo
     return inside
 
 
+def _first_zone_containing(
+    geometries: Geometries,
+    latitude: float,
+    longitude: float,
+    *,
+    maritime: bool,
+) -> int | None:
+    """First zone of the requested kind whose polygons contain the coordinate."""
+    for id_comarca, polygons in geometries.items():
+        if es_maritima(id_comarca) is not maritime:
+            continue
+        for polygon in polygons:
+            if _point_in_polygon(longitude, latitude, polygon):
+                return id_comarca
+    return None
+
+
 def comarca_at(
     geometries: Geometries,
     latitude: float,
@@ -295,17 +336,15 @@ def comarca_at(
 ) -> int | None:
     """Return the id of the zone containing a coordinate, `None` if outside.
 
-    Maritime zones overlap nothing on land but do surround it, so they are
-    skipped unless explicitly asked for: a coastal point must resolve to its
-    comarca, not to the sea in front of it.
+    The maritime zones reach over the coastline of the comarques they face, so
+    land is scanned first and the sea only as a fallback: a coastal point must
+    resolve to its comarca, not to the sea in front of it, whatever order the
+    payload happens to list the zones in.
     """
-    for id_comarca, polygons in geometries.items():
-        if not include_sea and es_maritima(id_comarca):
-            continue
-        for polygon in polygons:
-            if _point_in_polygon(longitude, latitude, polygon):
-                return id_comarca
-    return None
+    on_land = _first_zone_containing(geometries, latitude, longitude, maritime=False)
+    if on_land is not None or not include_sea:
+        return on_land
+    return _first_zone_containing(geometries, latitude, longitude, maritime=True)
 
 
 async def async_resolve_comarca(
@@ -345,5 +384,5 @@ async def async_resolve_comarca(
 
     id_comarca = comarca_at(geometries, latitude, longitude)
     if id_comarca is None:
-        return ComarcaResolution(error=ResolutionError.OUTSIDE_CATALONIA)
+        return ComarcaResolution(error=ResolutionError.LOCATION_OUTSIDE_CATALONIA)
     return ComarcaResolution(id_comarca=id_comarca)

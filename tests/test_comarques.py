@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from aiohttp import ClientSession
 from aioresponses import aioresponses
+from custom_components.avisoscat import comarques
 from custom_components.avisoscat.comarques import (
     COMARQUES,
     TOPOJSON_OBJECT,
@@ -38,6 +39,15 @@ MOIA = (41.8100, 2.0970)
 PRATS_DE_LLUCANES = (42.0100, 2.0300)
 FRAGA_ARAGON = (41.5210, 0.3490)
 OFF_BARCELONA = (41.3500, 2.2500)
+# On the Baix Llobregat shoreline, where the comarca (11) and the maritime zone
+# in front of it (91) both contain the point.
+CASTELLDEFELS_SHORE = (41.2800, 2.0800)
+
+
+@pytest.fixture(autouse=True)
+def _forget_unknown_ids() -> None:
+    """`nom()` warns once per unseen id; that memory outlives a single test."""
+    comarques._warned_unknown_ids.clear()
 
 
 @pytest.fixture(name="topology")
@@ -84,6 +94,22 @@ def test_unknown_id_degrades_with_a_warning(
     with caplog.at_level(logging.WARNING):
         assert nom(77) == "Comarca 77"
     assert "77" in caplog.text
+
+
+def test_unknown_id_warns_once_but_degrades_every_time(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`nom()` runs on every coordinator refresh: one log line per id, not per call."""
+    with caplog.at_level(logging.WARNING):
+        assert [nom(77) for _ in range(5)] == ["Comarca 77"] * 5
+        assert nom(78) == "Comarca 78"
+
+    warned = [
+        record.args
+        for record in caplog.records
+        if record.name == comarques.__name__ and record.levelno == logging.WARNING
+    ]
+    assert warned == [(77,), (78,)]
 
 
 def test_coastal_comarques_expose_their_maritime_zone() -> None:
@@ -166,6 +192,20 @@ def test_sea_is_resolved_only_when_asked_for(geometries: dict) -> None:
     assert comarca_at(geometries, *BARCELONA, include_sea=True) == 13
 
 
+def test_land_wins_where_a_maritime_zone_overlaps_the_coast(geometries: dict) -> None:
+    """The shoreline is inside both zones; land must win regardless of payload order."""
+    # The point really is inside Mar Baix Llobregat as well, so only explicit
+    # land-first precedence keeps it in Baix Llobregat.
+    sea_only = {91: geometries[91]}
+    assert comarca_at(sea_only, *CASTELLDEFELS_SHORE, include_sea=True) == 91
+
+    assert comarca_at(geometries, *CASTELLDEFELS_SHORE) == 11
+    assert comarca_at(geometries, *CASTELLDEFELS_SHORE, include_sea=True) == 11
+
+    reversed_order = dict(reversed(list(geometries.items())))
+    assert comarca_at(reversed_order, *CASTELLDEFELS_SHORE, include_sea=True) == 11
+
+
 def test_holes_read_as_outside() -> None:
     """Even-odd counting makes an enclave exclude itself from its container."""
     # One square with a square hole, stored untransformed: outer ring as arc 0,
@@ -237,6 +277,28 @@ def test_decoding_skips_unusable_geometries() -> None:
     assert decode_topology({"objects": {}}) == {}
 
 
+@pytest.mark.parametrize(
+    "geometry",
+    [
+        # `arcs` renamed or dropped upstream.
+        {"type": "Polygon", "properties": {"IDComarca": 1}},
+        # Present but stitching to nothing.
+        {"type": "Polygon", "properties": {"IDComarca": 1}, "arcs": []},
+        {"type": "Polygon", "properties": {"IDComarca": 1}, "arcs": [[]]},
+        {"type": "MultiPolygon", "properties": {"IDComarca": 1}, "arcs": [[]]},
+        {"type": "MultiPolygon", "properties": {"IDComarca": 1}, "arcs": [[[]]]},
+    ],
+)
+def test_geometries_without_usable_rings_are_dropped(geometry: dict) -> None:
+    """An id with no point in it is not geometry, and must not look like some."""
+    topology = {
+        "arcs": [],
+        "objects": {TOPOJSON_OBJECT: {"geometries": [geometry]}},
+    }
+
+    assert decode_topology(topology) == {}
+
+
 # ---------------------------------------------------------------------------
 # Resolution: failure is a value, never an exception
 # ---------------------------------------------------------------------------
@@ -272,7 +334,10 @@ async def test_point_outside_catalonia_is_reported_not_raised() -> None:
 
     assert result.id_comarca is None
     assert not result.ok
-    assert result.error is ResolutionError.OUTSIDE_CATALONIA
+    assert result.error is ResolutionError.LOCATION_OUTSIDE_CATALONIA
+    # The value doubles as the config-flow error key documented in
+    # docs/03-feature-spec.md §2.
+    assert result.error == "location_outside_catalonia"
 
 
 async def test_download_failure_falls_back_instead_of_raising() -> None:
@@ -313,6 +378,23 @@ async def test_unparseable_body_is_reported_as_a_value() -> None:
                             "properties": {"IDComarca": 1},
                             "arcs": [[9]],
                         }
+                    ]
+                }
+            },
+        },
+        # Well-formed ids carrying no ring at all: unusable geometry, and the
+        # flow must say so rather than claim the location is outside Catalonia.
+        {
+            "arcs": [],
+            "objects": {
+                TOPOJSON_OBJECT: {
+                    "geometries": [
+                        {"type": "Polygon", "properties": {"IDComarca": 1}},
+                        {
+                            "type": "MultiPolygon",
+                            "properties": {"IDComarca": 2},
+                            "arcs": [[]],
+                        },
                     ]
                 }
             },
