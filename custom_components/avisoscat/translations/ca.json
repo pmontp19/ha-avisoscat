@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Avisos Meteocat",
+        "description": "Indiqueu la ubicació a vigilar. La comarca es resol localment i només es desa la comarca.",
+        "data": {
+          "location": "Ubicació"
+        },
+        "data_description": {
+          "location": "Els avisos es publiquen per comarca; el marcador només serveix per triar quina se segueix."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Aquesta comarca ja està configurada."
+    }
+  }
+}

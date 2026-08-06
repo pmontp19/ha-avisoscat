@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Avisos Meteocat",
+        "description": "Indica la ubicación a vigilar. Su comarca se resuelve localmente y solo se guarda la comarca.",
+        "data": {
+          "location": "Ubicación"
+        },
+        "data_description": {
+          "location": "Los avisos se publican por comarca; el marcador solo sirve para elegir cuál se sigue."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Esta comarca ya está configurada."
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Avisos Meteocat",
+        "description": "Set the location to monitor. Its comarca is resolved locally and only the comarca is stored.",
+        "data": {
+          "location": "Location"
+        },
+        "data_description": {
+          "location": "Warnings are published per comarca; the marker only picks which one to follow."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This comarca is already configured."
+    }
+  }
+}

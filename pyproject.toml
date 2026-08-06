@@ -1,0 +1,39 @@
+[project]
+name = "ha-avisoscat"
+version = "0.1.0"
+description = "Home Assistant custom integration for Meteocat severe-weather warnings (Situació Meteorològica de Perill)."
+requires-python = ">=3.13"
+license = { text = "MIT" }
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["custom_components/avisoscat"]
+
+[tool.ruff.lint]
+select = [
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "F",    # pyflakes
+  "I",    # isort
+  "UP",   # pyupgrade
+  "B",    # flake8-bugbear
+  "SIM",  # flake8-simplify
+  "RUF",  # ruff-specific rules
+  "ASYNC", # flake8-async (HA is asyncio-first)
+  "PL",   # pylint
+]
+ignore = [
+  "PLR0913", # too many arguments — common in HA entity constructors
+  "PLR2004", # magic value comparison
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR2004"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
