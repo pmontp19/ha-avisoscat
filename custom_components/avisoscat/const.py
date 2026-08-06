@@ -14,11 +14,21 @@ ATTRIBUTION = "Dades del Servei Meteorològic de Catalunya (Meteocat)"
 # SMP warnings without an API key — default source
 # (docs/01-data-sources.md §7)
 #
-# Both pages embed the same inline `Meteocat.avisosSMP(...)` payload, but
-# docs/01-data-sources.md §3.1 recorded them returning slightly different
-# episode sets. The parser task validates which one is authoritative and
-# whether the fallback is still needed; until then treat the radar page as
-# primary and the homepage as the fallback, exactly as documented.
+# Settled on 2026-08-06, with an episode open (a violent-weather vigilance at
+# grade 6 plus rain warnings at grade 4): the two pages return the *same payload
+# byte for byte*, so the light one is primary and the ~102 KB homepage stays only
+# as the fallback. Measurements in docs/captures/smp-page-choice-2026-08-06.md.
+#
+# The "different pages returned different episode sets" of
+# docs/01-data-sources.md §3.1 turned out not to be about pages at all: the
+# homepage renders the call twice, a 1-day visor and a 3-day widget, and the
+# 1-day one is a strict subset. Anchoring on the first match is what changed the
+# answer, which is why `parser.py` picks the richest candidate. The fallback is
+# therefore about availability, not completeness.
+#
+# The radar page sends `cache-control: max-age=180`, not the 600 measured
+# elsewhere in §3.1. The 10-minute polling floor below stays as it is: it is more
+# conservative than the source asks for.
 # ---------------------------------------------------------------------------
 
 SMP_PAGE_URL = "https://www.meteo.cat/observacions/radar"

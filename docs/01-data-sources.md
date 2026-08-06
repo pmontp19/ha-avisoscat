@@ -286,9 +286,20 @@ Mides gzip de les pàgines que porten el payload complet:
 | `https://www.meteo.cat/prediccio/general` | ~67 KB |
 | `https://www.meteo.cat/` | ~102 KB |
 
-⚠️ En el mostreig fet, pàgines diferents han retornat conjunts d'episodis lleugerament
-diferents. **Abans de fixar una pàgina, cal validar-la contra `https://www.meteo.cat/`
-durant un episodi amb diversos meteors oberts** i, si hi ha dubte, quedar-se amb l'arrel.
+⚠️ En el mostreig del 2026-08-05, pàgines diferents van retornar conjunts d'episodis
+lleugerament diferents. **Resolt el 2026-08-06 amb un episodi obert**
+([`captures/smp-page-choice-2026-08-06.md`](captures/smp-page-choice-2026-08-06.md)): les dues
+pàgines candidates retornen el mateix payload byte a byte. La discrepància no era entre
+pàgines sinó **entre les dues crides que l'arrel renderitza** (un visor de `dies:1` i un giny
+de `dies:3`, on la primera és un subconjunt estricte de la segona). La pàgina del radar es
+queda com a primària.
+
+Dues mesures més d'aquella captura:
+
+- La pàgina del radar envia `cache-control: max-age=180`, no 600.
+- ⚠️ **L'ordre de `afectacions` no és estable entre peticions**: amb dades SMP idèntiques, la
+  llista d'una franja pot sortir rotada. Qualsevol `payload_hash` o comparació d'snapshots ha
+  de ser insensible a l'ordre, o detectarà un canvi a cada cicle.
 
 ### 3.2 Extracció
 
@@ -297,9 +308,11 @@ Localitzar `Meteocat.avisosSMP(` i, a partir d'allà, extreure els arrays de les
 expressió regular greedy: el payload conté claudàtors dins de cadenes). El resultat és JSON
 vàlid tal qual (`json.loads`).
 
-⚠️ Dins de la mateixa crida hi ha un objecte `opcions` que **també** té una clau `avisos`
-(buida). Cal ancorar-se a la clau que conté un array no buit d'episodis, no a la primera
-coincidència.
+⚠️ Hi ha tres claus `avisos` que no són la que busquem: la de l'objecte `opcions` (buida), la
+que porta **cada episodi** del payload (les emissions successives d'aquell episodi) i, a
+l'arrel, la de la segona còpia de la crida. `parser.py` llegeix les claus **només al nivell
+superior de la crida** i, entre còpies de la crida, es queda amb la **més rica** — no amb la
+primera no buida (§3.1).
 
 ---
 
