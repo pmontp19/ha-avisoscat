@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # Bumped manually alongside Home Assistant core releases — an
+      # automated bump here would drift from what production HA runs.
+      - dependency-name: "homeassistant"
+      - dependency-name: "pytest-homeassistant-custom-component"
+      # Pinned exactly by pytest-homeassistant-custom-component itself —
+      # bumping either standalone makes uv's resolver fail. Move them in
+      # lockstep with the pin above instead.
+      - dependency-name: "pytest"
+      - dependency-name: "pytest-cov"

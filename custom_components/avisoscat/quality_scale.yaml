@@ -1,0 +1,84 @@
+rules:
+  # ─── 🥉 Bronze ────────────────────────────────────────────────────────────
+  # Scaffold only: everything that needs runtime code is `todo` until the task
+  # that implements it lands. Exemptions below are structural, not pending.
+  action_setup:
+    status: exempt
+    comment: "No service actions exposed (bus events plus a blueprint is the chosen UX pattern, as in ha-incendiscat)."
+  appropriate_polling: todo
+  brands: todo
+  common_modules: todo
+  config_flow: todo
+  config_flow_test_coverage: todo
+  dependency_transparency: done
+  docs_actions:
+    status: exempt
+    comment: "No service actions to document."
+  docs_triggers: todo
+  docs_conditions:
+    status: exempt
+    comment: "Integration does not expose a custom Condition platform. Template/attribute conditions are covered by HA core docs."
+  docs_high_level_description: todo
+  docs_installation_instructions: todo
+  docs_removal_instructions: todo
+  entity_event_setup:
+    status: exempt
+    comment: "Integration subscribes to no entity events; it fires bus events instead."
+  entity_unique_id: todo
+  has_entity_name: todo
+  runtime_data: todo
+  test_before_configure: todo
+  test_before_setup: todo
+  unique_config_entry: todo
+
+  # ─── 🥈 Silver ────────────────────────────────────────────────────────────
+  action_exceptions:
+    status: exempt
+    comment: "No service actions."
+  config_entry_unloading: done
+  docs_configuration_parameters: todo
+  docs_installation_parameters: todo
+  entity_unavailable: todo
+  integration_owner: done
+  log_when_unavailable: todo
+  parallel_updates: todo
+  reauthentication_flow: todo
+  test_coverage: todo
+
+  # ─── 🥇 Gold ──────────────────────────────────────────────────────────────
+  devices: todo
+  diagnostics: todo
+  discovery:
+    status: exempt
+    comment: "Cloud-hosted web service, not a local network device. Zeroconf/DHCP discovery does not apply."
+  discovery_update_info:
+    status: exempt
+    comment: "No discovery flow exists."
+  docs_data_update: todo
+  docs_examples: todo
+  docs_known_limitations: todo
+  docs_supported_devices:
+    status: exempt
+    comment: "Integration exposes no physical devices; it consumes a public web service."
+  docs_supported_functions: todo
+  docs_troubleshooting: todo
+  docs_use_cases: todo
+  dynamic_devices:
+    status: exempt
+    comment: "One fixed service device per config entry (no devices added or removed after setup)."
+  entity_category: todo
+  entity_device_class: todo
+  entity_disabled_by_default: todo
+  entity_translations: todo
+  exception_translations: todo
+  icon_translations: todo
+  reconfiguration_flow: todo
+  repair_issues: todo
+  stale_devices:
+    status: exempt
+    comment: "No dynamic device lifecycle."
+
+  # ─── 🏆 Platinum ──────────────────────────────────────────────────────────
+  async_dependency: done
+  inject_websession: todo
+  strict_typing: todo
