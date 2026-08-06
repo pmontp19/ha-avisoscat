@@ -1,0 +1,986 @@
+[
+ [
+  {
+   "id": null,
+   "estat": {
+    "nom": "Obert",
+    "data": null
+   },
+   "meteor": {
+    "idMeteor": null,
+    "nom": "Intensitat de pluja en 30 minuts"
+   },
+   "avisos": [
+    {
+     "tipus": "Avís",
+     "dataEmisio": "2026-08-04T15:30Z",
+     "dataInici": "2026-08-04T12:00Z",
+     "dataFi": "2026-08-06T17:59Z",
+     "evolucions": [
+      {
+       "dia": "2026-08-04T00:00Z",
+       "comentari": "Els xàfecs aniran acompanyats de tempesta i no es descarta fenòmens de temps violent, especialment pedra.",
+       "representatiu": 1.0,
+       "llindar1": "Intensitat > 20 mm / 30 minuts",
+       "llindar2": null,
+       "distribucioGeografica": "LOCAL",
+       "periodes": [
+        {
+         "nom": "00-06",
+         "afectacions": null
+        },
+        {
+         "nom": "06-12",
+         "afectacions": null
+        },
+        {
+         "nom": "12-18",
+         "afectacions": [
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 1.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 3.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 6.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 7.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 8.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 9.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 11.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 14.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 16.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 18.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 19.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 22.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 24.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 29.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 31.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 32.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 34.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 35.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 38.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 40.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 41.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 42.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 43.0,
+           "nivell": 1.0
+          }
+         ]
+        },
+        {
+         "nom": "18-00",
+         "afectacions": [
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 7.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 14.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 24.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 35.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 42.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 43.0,
+           "nivell": 1.0
+          }
+         ]
+        }
+       ],
+       "valorMaxim": null
+      },
+      {
+       "dia": "2026-08-05T00:00Z",
+       "comentari": "",
+       "representatiu": 1.0,
+       "llindar1": "Intensitat > 20 mm / 30 minuts",
+       "llindar2": null,
+       "distribucioGeografica": "LOCAL",
+       "periodes": [
+        {
+         "nom": "00-06",
+         "afectacions": null
+        },
+        {
+         "nom": "06-12",
+         "afectacions": null
+        },
+        {
+         "nom": "12-18",
+         "afectacions": null
+        },
+        {
+         "nom": "18-00",
+         "afectacions": null
+        }
+       ],
+       "valorMaxim": null
+      },
+      {
+       "dia": "2026-08-06T00:00Z",
+       "comentari": "Els xàfecs aniran acompanyats de tempesta i localment de pedra.",
+       "representatiu": 1.0,
+       "llindar1": "Intensitat > 20 mm / 30 minuts",
+       "llindar2": null,
+       "distribucioGeografica": "EXTENSA",
+       "periodes": [
+        {
+         "nom": "00-06",
+         "afectacions": null
+        },
+        {
+         "nom": "06-12",
+         "afectacions": null
+        },
+        {
+         "nom": "12-18",
+         "afectacions": [
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 1.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 3.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 4.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 5.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 6.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 7.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 11.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 14.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 15.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 16.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 19.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 24.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 25.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 26.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 31.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 32.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 34.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 35.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 39.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 40.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 41.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 42.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 43.0,
+           "nivell": 1.0
+          }
+         ]
+        },
+        {
+         "nom": "18-00",
+         "afectacions": null
+        }
+       ],
+       "valorMaxim": null
+      }
+     ],
+     "estat": "Ampliat"
+    },
+    {
+     "tipus": "Avís",
+     "dataEmisio": "2026-08-04T07:43Z",
+     "dataInici": "2026-08-04T12:00Z",
+     "dataFi": "2026-08-06T17:59Z",
+     "evolucions": [
+      {
+       "dia": "2026-08-04T00:00Z",
+       "comentari": "Els xàfecs aniran acompanyats de tempesta i no es descarta fenòmens de temps violent, especialment pedra.",
+       "representatiu": 1.0,
+       "llindar1": "Intensitat > 20 mm / 30 minuts",
+       "llindar2": null,
+       "distribucioGeografica": "LOCAL",
+       "periodes": [
+        {
+         "nom": "00-06",
+         "afectacions": null
+        },
+        {
+         "nom": "06-12",
+         "afectacions": null
+        },
+        {
+         "nom": "12-18",
+         "afectacions": [
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 1.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 3.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 6.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 7.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 8.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 9.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 11.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 14.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 16.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 18.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 19.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 22.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 24.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 29.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 31.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 32.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 34.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 35.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 38.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 40.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 41.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 42.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-04T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 43.0,
+           "nivell": 1.0
+          }
+         ]
+        },
+        {
+         "nom": "18-00",
+         "afectacions": null
+        }
+       ],
+       "valorMaxim": null
+      },
+      {
+       "dia": "2026-08-05T00:00Z",
+       "comentari": "",
+       "representatiu": 1.0,
+       "llindar1": "Intensitat > 20 mm / 30 minuts",
+       "llindar2": null,
+       "distribucioGeografica": "LOCAL",
+       "periodes": [
+        {
+         "nom": "00-06",
+         "afectacions": null
+        },
+        {
+         "nom": "06-12",
+         "afectacions": null
+        },
+        {
+         "nom": "12-18",
+         "afectacions": null
+        },
+        {
+         "nom": "18-00",
+         "afectacions": null
+        }
+       ],
+       "valorMaxim": null
+      },
+      {
+       "dia": "2026-08-06T00:00Z",
+       "comentari": "Els xàfecs aniran acompanyats de tempesta i localment de pedra.",
+       "representatiu": 1.0,
+       "llindar1": "Intensitat > 20 mm / 30 minuts",
+       "llindar2": null,
+       "distribucioGeografica": "EXTENSA",
+       "periodes": [
+        {
+         "nom": "00-06",
+         "afectacions": null
+        },
+        {
+         "nom": "06-12",
+         "afectacions": null
+        },
+        {
+         "nom": "12-18",
+         "afectacions": [
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 1.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 3.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 4.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 5.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 6.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 7.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 11.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 14.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 15.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 16.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 19.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 24.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 25.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 26.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 31.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 2.0,
+           "idComarca": 32.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 34.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 35.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 39.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 40.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 1.0,
+           "idComarca": 41.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 42.0,
+           "nivell": 1.0
+          },
+          {
+           "dia": "2026-08-06T00:00Z",
+           "llindar": "Intensitat > 20 mm / 30 minuts",
+           "auxiliar": false,
+           "perill": 3.0,
+           "idComarca": 43.0,
+           "nivell": 1.0
+          }
+         ]
+        },
+        {
+         "nom": "18-00",
+         "afectacions": null
+        }
+       ],
+       "valorMaxim": null
+      }
+     ],
+     "estat": "Ampliat"
+    }
+   ]
+  }
+ ]
+]

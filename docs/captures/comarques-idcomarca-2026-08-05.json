@@ -1,0 +1,277 @@
+[
+  {
+    "id": 1,
+    "nom": "Alt Camp",
+    "capital": "Valls"
+  },
+  {
+    "id": 2,
+    "nom": "Alt Empordà",
+    "capital": "Figueres"
+  },
+  {
+    "id": 3,
+    "nom": "Alt Penedès",
+    "capital": "Vilafranca del Penedès"
+  },
+  {
+    "id": 4,
+    "nom": "Alt Urgell",
+    "capital": "la Seu d'Urgell"
+  },
+  {
+    "id": 5,
+    "nom": "Alta Ribagorça",
+    "capital": "el Pont de Suert"
+  },
+  {
+    "id": 6,
+    "nom": "Anoia",
+    "capital": "Igualada"
+  },
+  {
+    "id": 7,
+    "nom": "Bages",
+    "capital": "Manresa"
+  },
+  {
+    "id": 8,
+    "nom": "Baix Camp",
+    "capital": "Reus"
+  },
+  {
+    "id": 9,
+    "nom": "Baix Ebre",
+    "capital": "Tortosa"
+  },
+  {
+    "id": 10,
+    "nom": "Baix Empordà",
+    "capital": "la Bisbal d'Empordà"
+  },
+  {
+    "id": 11,
+    "nom": "Baix Llobregat",
+    "capital": "Sant Feliu de Llobregat"
+  },
+  {
+    "id": 12,
+    "nom": "Baix Penedès",
+    "capital": "el Vendrell"
+  },
+  {
+    "id": 13,
+    "nom": "Barcelonès",
+    "capital": "Barcelona"
+  },
+  {
+    "id": 14,
+    "nom": "Berguedà",
+    "capital": "Berga"
+  },
+  {
+    "id": 15,
+    "nom": "Cerdanya",
+    "capital": "Puigcerdà"
+  },
+  {
+    "id": 16,
+    "nom": "Conca de Barberà",
+    "capital": "Montblanc"
+  },
+  {
+    "id": 17,
+    "nom": "Garraf",
+    "capital": "Vilanova i la Geltrú"
+  },
+  {
+    "id": 18,
+    "nom": "Garrigues",
+    "capital": "les Borges Blanques"
+  },
+  {
+    "id": 19,
+    "nom": "Garrotxa",
+    "capital": "Olot"
+  },
+  {
+    "id": 20,
+    "nom": "Gironès",
+    "capital": "Girona"
+  },
+  {
+    "id": 21,
+    "nom": "Maresme",
+    "capital": "Mataró"
+  },
+  {
+    "id": 22,
+    "nom": "Montsià",
+    "capital": "Amposta"
+  },
+  {
+    "id": 23,
+    "nom": "Noguera",
+    "capital": "Balaguer"
+  },
+  {
+    "id": 24,
+    "nom": "Osona",
+    "capital": "Vic"
+  },
+  {
+    "id": 25,
+    "nom": "Pallars Jussà",
+    "capital": "Tremp"
+  },
+  {
+    "id": 26,
+    "nom": "Pallars Sobirà",
+    "capital": "Sort"
+  },
+  {
+    "id": 27,
+    "nom": "Pla d'Urgell",
+    "capital": "Mollerussa"
+  },
+  {
+    "id": 28,
+    "nom": "Pla de l'Estany",
+    "capital": "Banyoles"
+  },
+  {
+    "id": 29,
+    "nom": "Priorat",
+    "capital": "Falset"
+  },
+  {
+    "id": 30,
+    "nom": "Ribera d'Ebre",
+    "capital": "Móra d'Ebre"
+  },
+  {
+    "id": 31,
+    "nom": "Ripollès",
+    "capital": "Ripoll"
+  },
+  {
+    "id": 32,
+    "nom": "Segarra",
+    "capital": "Cervera"
+  },
+  {
+    "id": 33,
+    "nom": "Segrià",
+    "capital": "Lleida"
+  },
+  {
+    "id": 34,
+    "nom": "Selva",
+    "capital": "Santa Coloma de Farners"
+  },
+  {
+    "id": 35,
+    "nom": "Solsonès",
+    "capital": "Solsona"
+  },
+  {
+    "id": 36,
+    "nom": "Tarragonès",
+    "capital": "Tarragona"
+  },
+  {
+    "id": 37,
+    "nom": "Terra Alta",
+    "capital": "Gandesa"
+  },
+  {
+    "id": 38,
+    "nom": "Urgell",
+    "capital": "Tàrrega"
+  },
+  {
+    "id": 39,
+    "nom": "Val d'Aran",
+    "capital": "Vielha"
+  },
+  {
+    "id": 40,
+    "nom": "Vallès Occidental",
+    "capital": "Sabadell / Terrassa"
+  },
+  {
+    "id": 41,
+    "nom": "Vallès Oriental",
+    "capital": "Granollers"
+  },
+  {
+    "id": 42,
+    "nom": "Moianès",
+    "capital": "Moià"
+  },
+  {
+    "id": 43,
+    "nom": "Lluçanès",
+    "capital": "Prats de Lluçanès"
+  },
+  {
+    "id": 88,
+    "nom": "Mar Montsià",
+    "capital": null
+  },
+  {
+    "id": 89,
+    "nom": "Mar Baix Ebre",
+    "capital": null
+  },
+  {
+    "id": 90,
+    "nom": "Mar Baix Camp",
+    "capital": null
+  },
+  {
+    "id": 91,
+    "nom": "Mar Baix Llobregat",
+    "capital": null
+  },
+  {
+    "id": 92,
+    "nom": "Mar Baix Penedès",
+    "capital": null
+  },
+  {
+    "id": 93,
+    "nom": "Mar Garraf",
+    "capital": null
+  },
+  {
+    "id": 94,
+    "nom": "Mar Tarragonès",
+    "capital": null
+  },
+  {
+    "id": 95,
+    "nom": "Mar Barcelonès",
+    "capital": null
+  },
+  {
+    "id": 96,
+    "nom": "Mar Maresme",
+    "capital": null
+  },
+  {
+    "id": 97,
+    "nom": "Mar Selva",
+    "capital": null
+  },
+  {
+    "id": 98,
+    "nom": "Mar Baix Empordà",
+    "capital": null
+  },
+  {
+    "id": 99,
+    "nom": "Mar Alt Empordà",
+    "capital": null
+  }
+]
