@@ -45,7 +45,7 @@ from custom_components.avisoscat.vigencia import (
     projeccions,
 )
 
-from .conftest import ID_COMARCA_OSONA, FakeClock
+from .conftest import ID_COMARCA_OSONA, FakeClock, run_in_isolated_interpreter
 
 # The comarca every test asks about, and a neighbour that must never leak in.
 OSONA = ID_COMARCA_OSONA
@@ -164,10 +164,94 @@ def _horitzons(
 # The module stays pure Python (docs/04-architecture.md §5)
 # ---------------------------------------------------------------------------
 
+# Loads `models.py` and `vigencia.py` into a synthetic package in the child, so
+# `vigencia`'s relative import resolves without going through
+# `custom_components.avisoscat.__init__`, which does import Home Assistant. The
+# child then projects a real payload and reports what it computed and what it
+# loaded.
+_ISOLATION_SCRIPT = """
+import datetime as dt
+import importlib.util
+import json
+import sys
+import types
 
-def test_no_home_assistant_import() -> None:
-    """Validity logic must be testable without a Home Assistant runtime."""
-    assert "homeassistant" not in Path(vigencia.__file__).read_text(encoding="utf-8")
+directory = sys.argv[1]
+package = types.ModuleType("avisoscat_pure")
+package.__path__ = [directory]
+sys.modules[package.__name__] = package
+
+
+def load(name):
+    spec = importlib.util.spec_from_file_location(
+        f"{package.__name__}.{name}", f"{directory}/{name}.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    setattr(package, name, module)
+    return module
+
+
+models = load("models")
+vigencia = load("vigencia")
+
+raw = [[{"estat": "Obert",
+         "meteor": {"idMeteor": None, "nom": "Vent"},
+         "avisos": [{"tipus": "Avis", "estat": "Vigent",
+                     "dataEmisio": "2026-08-04T15:30Z",
+                     "dataInici": "2026-08-04T12:00Z",
+                     "dataFi": "2026-08-05T23:59Z",
+                     "evolucions": [{"dia": "2026-08-05T00:00Z",
+                                     "periodes": [
+                                         {"nom": "12-18",
+                                          "afectacions": [{"perill": 3.0,
+                                                           "idComarca": 24.0,
+                                                           "nivell": 1.0}]},
+                                         {"nom": "18-00", "afectacions": None}]}]}]}]]
+episodis = models.parse_snapshot(raw).episodis
+now = dt.datetime(2026, 8, 5, 13, 0, tzinfo=dt.UTC)
+vigents = vigencia.afectacions_vigents(episodis, 24, now)
+print(json.dumps({
+    "home_assistant": sorted(
+        name for name in sys.modules if name.split(".")[0] == "homeassistant"
+    ),
+    "periode_actual": vigencia.periode_actual(now),
+    "vigents": [{"horitzo": af.horitzo.value,
+                 "periode": af.periode,
+                 "perill": af.perill,
+                 "etiqueta_dia": af.etiqueta_dia,
+                 "fi": af.fi.isoformat()} for af in vigents],
+    "anunciades": len(vigencia.afectacions_anunciades(episodis, 24, now)),
+}))
+"""
+
+
+def test_vigencia_projects_in_an_interpreter_without_home_assistant() -> None:
+    """Validity logic must run in an interpreter that never imports HA.
+
+    The contract of docs/04-architecture.md §5 is that this layer is pure Python
+    over already-typed objects. A fresh child interpreter proves it by actually
+    projecting a payload there and reporting the `homeassistant` modules it ended
+    up with, which a grep over this file's source could never establish.
+    """
+    report = run_in_isolated_interpreter(
+        _ISOLATION_SCRIPT, str(Path(vigencia.__file__).parent)
+    )
+
+    assert report["home_assistant"] == []
+    # What ran in isolation is the real module, not an empty shell.
+    assert report["periode_actual"] == "12-18"
+    assert report["vigents"] == [
+        {
+            "horitzo": "vigent",
+            "periode": "12-18",
+            "perill": 3,
+            "etiqueta_dia": "avui",
+            "fi": "2026-08-05T18:00:00+00:00",
+        }
+    ]
+    assert report["anunciades"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -574,13 +658,64 @@ def test_violent_weather_window_spans_the_bands_it_overlaps(clock: FakeClock) ->
     assert avui.graella["18-00"] == 3
 
 
+def test_violent_weather_crossing_midnight_is_in_force_today(clock: FakeClock) -> None:
+    """A window issued at 23:30 and read at 00:30 is in force, and it is `avui`.
+
+    The relative day of a live nowcast is the day it is read in: the emission's
+    own date would read as `-1` day ahead, outside the `avui`/`dema`/`dema_passat`
+    enumeration the events carry (docs/03-feature-spec.md §4.1). Being never
+    announced is unaffected by the crossing.
+    """
+    episodis = _temps_violent(data_emissio="2026-08-05T23:30Z")
+    clock.now = datetime(2026, 8, 6, 0, 30, tzinfo=UTC)
+
+    vigents = afectacions_vigents(episodis, OSONA, clock())
+    assert len(vigents) == 1
+    afectacio = vigents[0]
+    assert afectacio.horitzo is Horitzo.VIGENT
+    assert afectacio.fi == datetime(2026, 8, 6, 1, 30, tzinfo=UTC)
+    assert afectacio.dia == DEMA  # the day it is read in, i.e. the 6th
+    assert afectacio.dies_per_endavant == 0
+    assert afectacio.etiqueta_dia == "avui"
+    assert afectacions_anunciades(episodis, OSONA, clock()) == []
+
+    # Once the window has closed it belongs to the day it was issued on again.
+    clock.now = datetime(2026, 8, 6, 1, 30, tzinfo=UTC)
+    passades = projeccions(episodis, OSONA, clock())
+    assert [(af.horitzo, af.dia) for af in passades] == [(Horitzo.PASSAT, AVUI)]
+
+
 def test_violent_weather_without_an_issue_time_is_ignored(
     clock: FakeClock, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """No issue time means no window to compute, and it is said out loud."""
+    """No issue time means no window to compute, and it is said out loud.
+
+    At debug level, like the other tolerance paths of the once-a-minute walk.
+    """
     episodis = _temps_violent(data_emissio=None)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
         assert projeccions(episodis, OSONA, clock()) == []
+    assert "without an issue time" in caplog.text
+    assert [rec.levelno for rec in caplog.records] == [logging.DEBUG]
+
+
+def test_violent_weather_without_an_issue_time_is_silent_for_other_comarques(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """One entry per comarca, so a nowcast that never names ours says nothing.
+
+    Logging before the comarca filter would make every configured comarca report
+    a nowcast none of them appears in.
+    """
+    episodis = _temps_violent(
+        data_emissio=None, periodes={"06-12": [_afectacio(id_comarca=ALT_EMPORDA)]}
+    )
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
+        assert projeccions(episodis, OSONA, clock()) == []
+    assert caplog.records == []
+    # And the comarca it does name still reports the missing issue time.
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
+        assert projeccions(episodis, ALT_EMPORDA, clock()) == []
     assert "without an issue time" in caplog.text
 
 
@@ -717,15 +852,26 @@ def test_an_unknown_but_parseable_band_keeps_its_own_name(clock: FakeClock) -> N
     ]
 
 
-def test_an_unusable_band_name_is_ignored_with_a_warning(
+def test_an_unusable_band_name_is_ignored_and_logged_at_debug(
     clock: FakeClock, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A band that cannot be placed in time is dropped loudly, never guessed."""
+    """A band that cannot be placed in time is dropped, never guessed.
+
+    At debug level on purpose: this walk repeats every minute per config entry,
+    so a warning would repeat ~1440 times a day for one malformed field. Nothing
+    reaches the log at warning level.
+    """
     episodis = _episodis([_evolucio({"vespre": [_afectacio()]})])
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
         assert projeccions(episodis, OSONA, clock()) == []
     assert "Unusable SMP time band" in caplog.text
     assert [rec.name for rec in caplog.records] == [vigencia.__name__]
+    assert [rec.levelno for rec in caplog.records] == [logging.DEBUG]
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=vigencia.__name__):
+        assert projeccions(episodis, OSONA, clock()) == []
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize(
@@ -747,17 +893,21 @@ def test_a_missing_day_falls_back_instead_of_dropping_the_affectation(
     assert len(afectacions_vigents(episodis, OSONA, clock())) == 1
 
 
-def test_an_undatable_affectation_is_ignored_with_a_warning(
+def test_an_undatable_affectation_is_ignored_and_logged_at_debug(
     clock: FakeClock, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """With no day anywhere there is no interval to compute, and we say so."""
+    """With no day anywhere there is no interval to compute, and we say so.
+
+    At debug level, for the same once-a-minute reason as the unusable band.
+    """
     episodis = _episodis(
         [_evolucio({"12-18": [_afectacio(dia=None)]}, dia=None)],
         data_inici=None,
     )
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
         assert projeccions(episodis, OSONA, clock()) == []
     assert "Undatable SMP affectation" in caplog.text
+    assert [rec.levelno for rec in caplog.records] == [logging.DEBUG]
 
 
 def test_an_open_ended_warning_stays_in_force(clock: FakeClock) -> None:

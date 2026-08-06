@@ -384,8 +384,11 @@ def periode_bounds(dia: date, periode: str) -> tuple[datetime, datetime] | None:
 
 
 # El recorregut únic del qual es filtren els dos horitzons i la graella.
+# `Sequence` i no `Iterable`: cada punt d'entrada que es pot cridar més d'una
+# vegada amb el mateix argument el torna a recórrer, i un generador d'un sol ús
+# respondria "res" la segona vegada.
 def projeccions(
-    episodis: Iterable[Episodi], id_comarca: int, now_utc: datetime
+    episodis: Sequence[Episodi], id_comarca: int, now_utc: datetime
 ) -> list[AfectacioProjectada]: ...
 
 
@@ -412,6 +415,16 @@ anunciats (quan existeixen ja són vigents; una emissió amb data futura no info
 franges on apareixen es col·lapsen en una sola projecció, la més greu, perquè un nowcast
 repetit a dues franges no compti com dos avisos vigents.
 
+⚠️ **Excepció deliberada al dia relatiu, no la "corregeixis" tornant a l'aritmètica plana**:
+mentre la finestra de 2 h és oberta, el `dia` d'un nowcast és **el dia en què es llegeix**
+(`now.date()`), no el de l'emissió. Una emissió a les 23:30 llegida a les 00:30 encara és
+vigent: `(inici.date() - now.date()).days` valdria `-1` i `etiqueta_dia` retornaria `"-1"`,
+fora de l'enumeració `avui`/`dema`/`dema_passat` que els events porten (§4.1 de
+[`03-feature-spec.md`](03-feature-spec.md)), i una etiqueta que mira endavant no ha volgut
+dir mai res per a un avís que mai no és anunciat. Una finestra ja tancada conserva el dia en
+què es va emetre. `outlook()` no canvia: reparteix per solapament d'interval i ja situa bé la
+finestra a les dues cel·les.
+
 Vuit decisions que no es llegeixen del sketch:
 
 - **Un sol `AfectacioProjectada`** en lloc d'un `AfectacioVigent`: una afectació vigent i
@@ -430,7 +443,11 @@ Vuit decisions que no es llegeixen del sketch:
   l'aritmètica de franges. Hi ha un test d'hivern i un d'estiu que ho demostren.
 - **Els noms de franja es parsegen, no es busquen**: el `"18-24"` de la documentació escrita
   de l'SMC resol igual que el `"18-00"` del JSON i tots dos es normalitzen a `"18-00"`. Un
-  nom que no es pugui situar en el temps es descarta amb warning, mai s'endevina.
+  nom que no es pugui situar en el temps es descarta, mai s'endevina. El descart es registra
+  a **debug**, no a warning: aquest recorregut es repeteix cada minut i per cada entrada de
+  configuració, així que un sol camp malformat repetiria la mateixa línia ~1440 vegades al
+  dia. El report a nivell de payload és de `models.py`, un cop per fetch. Igual per a una
+  afectació sense cap dia i per a un nowcast sense hora d'emissió.
 - **No es filtra per grau**: un grau il·legible també val 0 (§4), així que descartar el 0
   aquí perdria afectacions reals. El llindar de severitat és cosa de les entitats.
 - **`outlook()` reparteix per solapament d'interval**, no per nom de franja: així una

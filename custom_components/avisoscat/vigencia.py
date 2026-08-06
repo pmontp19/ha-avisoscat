@@ -136,6 +136,11 @@ def _periode_hores(nom: str) -> tuple[int, int] | None:
     the `"18-24"` spelling of the written documentation resolves to the same
     range as the `"18-00"` the JSON actually sends, and a band the SMC invents
     later still places its affectations instead of dropping them.
+
+    An unusable name is reported at debug level, not at warning: this runs on the
+    once-a-minute recompute of `__init__.py`, so a single malformed field would
+    otherwise repeat the same line ~1440 times a day per config entry. The
+    payload-level report belongs to `models.py`, which logs once per fetch.
     """
     known = PERIODES.get(nom)
     if known is not None:
@@ -150,7 +155,7 @@ def _periode_hores(nom: str) -> tuple[int, int] | None:
     hora_fi = hora_fi or 24
     if 0 <= hora_inici < hora_fi <= 24:
         return hora_inici, hora_fi
-    _LOGGER.warning("Unusable SMP time band %r, ignoring its affectations", nom)
+    _LOGGER.debug("Unusable SMP time band %r, ignoring its affectations", nom)
     return None
 
 
@@ -220,7 +225,7 @@ class AfectacioProjectada:
     nivell: int  # 1 = low threshold, 2 = high threshold
     llindar: str
     auxiliar: bool
-    dia: date
+    dia: date  # day it applies to; the day it is read in for a live nowcast
     periode: str  # canonical band name; the band of the issue time for nowcasts
     inici: datetime  # effective start, band start clipped by `dataInici`
     fi: datetime  # effective end, exclusive: band end clipped by `dataFi`
@@ -387,7 +392,11 @@ def _projecta_bandes(
     candidates: Iterable[tuple[Evolucio, str, Afectacio]],
     now: datetime,
 ) -> list[AfectacioProjectada]:
-    """Project an ordinary warning: one entry per affected day and band."""
+    """Project an ordinary warning: one entry per affected day and band.
+
+    Like `_periode_hores`, the tolerance paths here log at debug level because
+    this walk repeats every minute for every configured comarca.
+    """
     projeccions_avis: list[AfectacioProjectada] = []
     for evolucio, nom, afectacio in candidates:
         hores = _periode_hores(nom)
@@ -395,7 +404,7 @@ def _projecta_bandes(
             continue
         dia = _dia_afectacio(afectacio, evolucio, avis)
         if dia is None:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Undatable SMP affectation for comarca %s in band %s, ignoring it",
                 afectacio.id_comarca,
                 nom,
@@ -438,16 +447,29 @@ def _projecta_temps_violent(
 
     The listed bands collapse to a single projection, the most severe one, so a
     nowcast repeated across two bands is not counted as two live warnings.
+
+    **`dia` is the day the window is read in, not the day of the emission**,
+    which is the one place in this module where the relative day is not plain
+    arithmetic over the affectation's own date. A nowcast issued at 23:30 and
+    read at 00:30 is in force *today*: `(inici.date() - now.date()).days` would
+    label it `-1`, outside the `avui`/`dema`/`dema_passat` payload enumeration of
+    docs/03-feature-spec.md §4.1, and a forward-looking label never meant
+    anything for a warning that is never announced. A window that has already
+    closed keeps the day it was issued on.
+
+    The comarca filter runs first: a nowcast that never names the comarca must be
+    silent for that config entry, including its missing-issue-time report, which
+    is at debug level because this runs on the once-a-minute recompute.
     """
+    triples = list(candidates)
+    if not triples:
+        return []
     emissio = avis.data_emissio or avis.data_inici
     if emissio is None:
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Violent-weather warning %r without an issue time, ignoring it",
             avis.tipus_nom,
         )
-        return []
-    triples = list(candidates)
-    if not triples:
         return []
     evolucio, _nom, afectacio = max(
         triples, key=lambda triple: (triple[2].perill, triple[2].nivell)
@@ -469,7 +491,7 @@ def _projecta_temps_violent(
             # The band containing the issue instant, for reporting only: the
             # window itself can spill into the next band and still be in force.
             periode=periode_actual(inici),
-            dia=inici.date(),
+            dia=now.date() if now < fi else inici.date(),
             inici=inici,
             fi=fi,
             now=now,
@@ -478,13 +500,19 @@ def _projecta_temps_violent(
 
 
 def projeccions(
-    episodis: Iterable[Episodi], id_comarca: int, now_utc: datetime
+    episodis: Sequence[Episodi], id_comarca: int, now_utc: datetime
 ) -> list[AfectacioProjectada]:
     """Every affectation of `id_comarca`, each placed on the clock.
 
-    The single walk the two horizons and the outlook are all derived from, so a
-    caller needing more than one of them pays for the walk once. Ordered by
-    start instant, most severe first within the same instant.
+    The single walk the two horizons and the outlook are all derived from: a
+    caller needing more than one of them walks once here and filters the result
+    with `afectacions_per_horitzo`. Ordered by start instant, most severe first
+    within the same instant.
+
+    `episodis` is a `Sequence` and not merely an `Iterable` because every entry
+    point that can be called repeatedly over the same argument walks it again; a
+    one-shot generator would silently answer "nothing" the second time, which in
+    a warning integration is a wrong answer rather than an error.
 
     Explicitly closed episodes and emissions are skipped, and nothing else is:
     an unknown `estat` counts as open (`models.py` trap #1) and grade 0 is kept,
@@ -529,7 +557,7 @@ def _ordre_severitat(afectacio: AfectacioProjectada) -> tuple[int, int, datetime
 
 
 def afectacions_vigents(
-    episodis: Iterable[Episodi], id_comarca: int, now_utc: datetime
+    episodis: Sequence[Episodi], id_comarca: int, now_utc: datetime
 ) -> list[AfectacioProjectada]:
     """Affectations applying to `id_comarca` **right now**, most severe first.
 
@@ -543,7 +571,7 @@ def afectacions_vigents(
 
 
 def afectacions_anunciades(
-    episodis: Iterable[Episodi], id_comarca: int, now_utc: datetime
+    episodis: Sequence[Episodi], id_comarca: int, now_utc: datetime
 ) -> list[AfectacioProjectada]:
     """Affectations issued for `id_comarca` but **not yet in force**.
 
@@ -627,7 +655,7 @@ class OutlookDia:
 
 
 def outlook(
-    episodis: Iterable[Episodi],
+    episodis: Sequence[Episodi],
     id_comarca: int,
     now_utc: datetime,
     *,
