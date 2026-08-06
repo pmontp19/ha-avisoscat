@@ -6,7 +6,7 @@ rules:
     status: exempt
     comment: "No service actions exposed (bus events plus a blueprint is the chosen UX pattern, as in ha-incendiscat)."
   appropriate_polling: todo
-  brands: todo
+  brands: done
   common_modules: todo
   config_flow: todo
   config_flow_test_coverage: todo
