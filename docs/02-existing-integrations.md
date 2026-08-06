@@ -128,6 +128,7 @@ sigui usable directament en automacions i targetes.
 ```python
 UPDATE_INTERVAL = timedelta(minutes=5)
 
+
 async def _async_update_data(self) -> GeoSphereData:
     last_modified = await self.client.get_last_modified()
     if self.data is None or last_modified != self._last_modified:

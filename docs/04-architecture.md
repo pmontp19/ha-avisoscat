@@ -81,10 +81,12 @@ Dues implementacions darrere d'una única interfície. El coordinator no sap qui
 class SmpSource(Protocol):
     async def fetch(self) -> SmpSnapshot: ...
 
-class PublicPageSource:      # sense clau — font per defecte
+
+class PublicPageSource:  # sense clau — font per defecte
     """Descarrega una pàgina de meteo.cat i n'extreu el payload inline."""
 
-class ApiKeySource:          # api.meteo.cat amb x-api-key
+
+class ApiKeySource:  # api.meteo.cat amb x-api-key
     """Consulta /pronostic/v2/smp/episodis-oberts i /…/preavisos."""
 ```
 
@@ -134,30 +136,35 @@ class Meteor(str, Enum):
     CALOR_NOCTURNA = "calor_nocturna"
     TEMPS_VIOLENT = "temps_violent"
 
+
 class TipusAvis(str, Enum):
     PREAVIS = "preavis"
     AVIS = "avis"
     VIGILANCIA = "vigilancia"
     TEMPS_VIOLENT = "temps_violent"
 
+
 class NivellPerill(str, Enum):
     """Codi semafòric oficial (grau 0-6 → 4 categories)."""
-    CAP = "cap"            # 0
-    MODERAT = "moderat"    # 1-2
-    ALT = "alt"            # 3-4
+
+    CAP = "cap"  # 0
+    MODERAT = "moderat"  # 1-2
+    ALT = "alt"  # 3-4
     MOLT_ALT = "molt_alt"  # 5-6
 
     @classmethod
     def from_perill(cls, perill: int) -> NivellPerill: ...
 
+
 @dataclass(frozen=True, slots=True)
 class Afectacio:
     id_comarca: int
-    perill: int          # 0-6
-    nivell: int          # 1 = llindar baix, 2 = llindar alt
+    perill: int  # 0-6
+    nivell: int  # 1 = llindar baix, 2 = llindar alt
     llindar: str
     auxiliar: bool
     dia: date
+
 
 @dataclass(frozen=True, slots=True)
 class Evolucio:
@@ -166,7 +173,8 @@ class Evolucio:
     llindar_baix: str | None
     llindar_alt: str | None
     distribucio_geografica: str | None
-    periodes: dict[str, tuple[Afectacio, ...]]   # "00-06" … "18-00"
+    periodes: dict[str, tuple[Afectacio, ...]]  # "00-06" … "18-00"
+
 
 @dataclass(frozen=True, slots=True)
 class Avis:
@@ -177,10 +185,11 @@ class Avis:
     data_fi: datetime | None
     evolucions: tuple[Evolucio, ...]
 
+
 @dataclass(frozen=True, slots=True)
 class Episodi:
-    meteor: Meteor | None       # None si el nom no es reconeix
-    meteor_nom: str             # nom cru del Meteocat, sempre preservat
+    meteor: Meteor | None  # None si el nom no es reconeix
+    meteor_nom: str  # nom cru del Meteocat, sempre preservat
     estat: str
     avisos: tuple[Avis, ...]
 ```
@@ -212,7 +221,9 @@ existeixi: cal creuar `dataInici`/`dataFi` amb la franja de 6 h UTC del moment a
 ```python
 PERIODES = {"00-06": (0, 6), "06-12": (6, 12), "12-18": (12, 18), "18-00": (18, 24)}
 
+
 def periode_actual(now_utc: datetime) -> str: ...
+
 
 def afectacions_vigents(
     episodis: Iterable[Episodi], id_comarca: int, now_utc: datetime
@@ -274,16 +285,16 @@ Estat que manté:
 @dataclass
 class AvisoscatState:
     snapshot: SmpSnapshot | None
-    en_vigor: dict[Meteor, AfectacioVigent]      # actiu ARA
-    anunciats: dict[Meteor, AfectacioFutura]     # emès, encara no vigent
-    outlook: dict[date, dict[str, int]]          # dia -> {franja: grau}, 3 dies
+    en_vigor: dict[Meteor, AfectacioVigent]  # actiu ARA
+    anunciats: dict[Meteor, AfectacioFutura]  # emès, encara no vigent
+    outlook: dict[date, dict[str, int]]  # dia -> {franja: grau}, 3 dies
     preavis: Preavis | None
     temps_violent: TempsViolent | None
     last_success: datetime | None
     last_error: str | None
     consecutive_failures: int
     quota: QuotaInfo | None
-    announced_seen: set[tuple[Meteor, TipusAvis, datetime]]   # dedup d'anuncis
+    announced_seen: set[tuple[Meteor, TipusAvis, datetime]]  # dedup d'anuncis
 ```
 
 `en_vigor` i `anunciats` són **dues projeccions del mateix snapshot**, separades pel
@@ -315,6 +326,7 @@ def _emit_announced(state, anunciats) -> None:
         if key not in state.announced_seen:
             state.announced_seen.add(key)
             fire(EVENT_WARNING_ANNOUNCED, payload_announced(af))
+
 
 def _emit_in_force(prev: dict[Meteor, AfectacioVigent], curr) -> None:
     for meteor, af in curr.items():
