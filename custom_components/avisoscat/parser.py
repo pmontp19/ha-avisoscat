@@ -182,7 +182,7 @@ def _call_spans(html: str) -> list[tuple[int, int]]:
             # Unbalanced with another occurrence still to come: prose naming the
             # call, or a call this scan cannot follow. Either way the reading to
             # the end of the page below would only hide the occurrences after it.
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "The Meteocat.avisosSMP( occurrence at offset %d is never closed "
                 "and is not the last one; skipping it",
                 found,

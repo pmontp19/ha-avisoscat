@@ -73,12 +73,15 @@ tolerant. Cap import de HA.
 
 `parser.py`: `extract_smp_payload(html) -> tuple[list, list]`. Localitza
 `Meteocat.avisosSMP(`, extreu els arrays de `avisos:` i `episodisPreavisos:` amb comptador
-de claudàtors **conscient de les cadenes**, descarta els buits (l'objecte `opcions` també
-en té un) i retorna JSON parsejat. Capturar la fixture `smp_page_sample.html` (pàgina real,
-retallada però amb el payload intacte).
+de claudàtors **conscient de les cadenes** i llegeix les claus **només al primer nivell**
+de la crida, cosa que exclou estructuralment tant la clau `avisos` buida de l'objecte
+`opcions` com la que porta cada episodi del payload. Entre les còpies de la crida es queda
+amb la **més rica**, no amb la primera que contingui episodis: així el visor d'1 dia de la
+portada no descarta en silenci els avisos de demà. Retorna JSON parsejat. Capturar la
+fixture `smp_page_sample.html` (pàgina real, retallada però amb el payload intacte).
 
 **Acceptació**
-- [ ] Extreu correctament el payload de la fixture real del 2026-08-05
+- [ ] Extreu correctament el payload de la fixture real del 2026-08-06
 - [ ] Un `comentari` que conté `[`, `]` o `{` no trenca l'extracció (test dedicat)
 - [ ] Pàgina sense episodis → `([], [])`, no excepció
 - [ ] Pàgina sense `Meteocat.avisosSMP(` → `SmpParseError`
@@ -118,8 +121,9 @@ per 4xx, `403 → ConfigEntryAuthFailed`, `429 → UpdateFailed` sense retry. `p
 al snapshot.
 
 **Acceptació**
-- [ ] Amb `aioresponses`, `PublicPageSource` prova el *fallback* quan la pàgina primària
-      no dona episodis, i només llavors
+- [ ] Amb `aioresponses`, `PublicPageSource` prova el *fallback* només quan la pàgina
+      primària falla (error de descàrrega o `SmpParseError`); un resultat buit **no**
+      l'activa
 - [ ] `ApiKeySource` envia la capçalera `x-api-key` i mai la registra al log
 - [ ] `429` no genera cap reintent (verificat comptant crides)
 - [ ] Les dues fonts produeixen un `SmpSnapshot` idèntic a partir del mateix JSON
