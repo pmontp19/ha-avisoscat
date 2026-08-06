@@ -255,14 +255,25 @@ def _as_optional_str(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _as_list(value: Any) -> list[Any]:
+def _as_list(value: Any, field: str) -> list[Any]:
     """Read a list field, which arrives as `null` instead of `[]` (trap #3).
 
     That is the whole of trap #3 in one function: the `null` the feed sends for an
-    empty collection, and anything else that is not a list, reads as no entries.
-    The container that holds the field is not affected by its emptiness.
+    empty collection reads as no entries, silently, because it is the documented
+    shape. Any other non-list type reads as no entries too, but with a warning
+    naming the field: a whole collection vanishing is the silent data loss this
+    module exists to prevent. Either way the container that holds the field is
+    kept, only its entries are lost.
     """
-    return value if isinstance(value, list) else []
+    if isinstance(value, list):
+        return value
+    if value is not None:
+        _LOGGER.warning(
+            "Discarding the SMP %s collection: expected a list, got %s",
+            field,
+            type(value).__name__,
+        )
+    return []
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -516,7 +527,7 @@ def _parse_afectacio(raw: Any) -> Afectacio | None:
 def _parse_periodes(raw_periodes: Any) -> dict[str, tuple[Afectacio, ...]]:
     """Build the band → affectations mapping, keyed by the JSON's own names."""
     periodes: dict[str, tuple[Afectacio, ...]] = {}
-    for raw_periode in _as_list(raw_periodes):
+    for raw_periode in _as_list(raw_periodes, "periodes"):
         if not isinstance(raw_periode, dict):
             _LOGGER.warning("Skipping non-object SMP time band %r", raw_periode)
             continue
@@ -526,7 +537,7 @@ def _parse_periodes(raw_periodes: Any) -> dict[str, tuple[Afectacio, ...]]:
             continue
         # `afectacions` is `null`, not `[]`, on a band with nothing in it
         # (trap #3, absorbed by `_as_list`). The band itself still becomes a key.
-        raw_afectacions = _as_list(raw_periode.get("afectacions"))
+        raw_afectacions = _as_list(raw_periode.get("afectacions"), "afectacions")
         parsed = _parse_all(raw_afectacions, _parse_afectacio)
         periodes[nom] = periodes.get(nom, ()) + parsed
     return periodes
@@ -563,7 +574,9 @@ def _parse_avis(raw: Any) -> Avis | None:
         data_emissio=_parse_datetime(raw.get("dataEmisio")),
         data_inici=_parse_datetime(raw.get("dataInici")),
         data_fi=_parse_datetime(raw.get("dataFi")),
-        evolucions=_parse_all(_as_list(raw.get("evolucions")), _parse_evolucio),
+        evolucions=_parse_all(
+            _as_list(raw.get("evolucions"), "evolucions"), _parse_evolucio
+        ),
     )
 
 
@@ -604,7 +617,7 @@ def _parse_episodi(raw: Any) -> Episodi | None:
         _LOGGER.warning("Skipping non-object SMP episode %r", raw)
         return None
     meteor, meteor_nom = _read_meteor(raw)
-    avisos = _parse_all(_as_list(raw.get("avisos")), _parse_avis)
+    avisos = _parse_all(_as_list(raw.get("avisos"), "avisos"), _parse_avis)
     return Episodi(
         meteor=meteor,
         meteor_nom=meteor_nom,

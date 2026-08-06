@@ -9,12 +9,12 @@ escaped: dropping data silently is exactly the failure mode these traps exist to
 prevent.
 """
 
-import importlib.util
 import json
 import logging
+import subprocess
 import sys
+from collections.abc import Callable
 from datetime import UTC, date, datetime
-from importlib.abc import MetaPathFinder
 from pathlib import Path
 
 import pytest
@@ -107,61 +107,62 @@ def _only_evolucio(snapshot: SmpSnapshot) -> Evolucio:
 # ---------------------------------------------------------------------------
 
 
-def _loaded_home_assistant_modules() -> dict[str, object]:
-    """Every `homeassistant` module currently in `sys.modules`."""
-    return {
-        name: module
-        for name, module in list(sys.modules.items())
-        if name == "homeassistant" or name.startswith("homeassistant.")
-    }
+# Loads models.py by file spec in the child interpreter and reports what it saw.
+# `sys.modules[spec.name]` is load-bearing, not defensive: `dataclasses` resolves
+# the deferred annotations by looking the module up under its own name.
+_ISOLATION_SCRIPT = """
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("avisoscat_models", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+
+raw = [[{"estat": "Obert",
+         "meteor": {"idMeteor": None, "nom": "Vent"},
+         "avisos": [{"tipus": "Avis", "estat": "Ampliat", "perill": 5.0}]}]]
+episodi = module.parse_snapshot(raw).episodis[0]
+print(json.dumps({
+    "home_assistant": sorted(
+        name for name in sys.modules if name.split(".")[0] == "homeassistant"
+    ),
+    "meteor": episodi.meteor.value,
+    "tipus": episodi.avisos[0].tipus.value,
+    "is_open": episodi.avisos[0].is_open,
+    "molt_alt": module.NivellPerill.from_perill(5.0).value,
+}))
+"""
 
 
-class _BlockHomeAssistant(MetaPathFinder):
-    """An import hook that makes the `homeassistant` package unreachable."""
-
-    def find_spec(
-        self, fullname: str, path: object = None, target: object = None
-    ) -> None:
-        """Fail loudly on a `homeassistant` import; `None` defers everything else."""
-        if fullname == "homeassistant" or fullname.startswith("homeassistant."):
-            msg = f"models.py must not import {fullname}"
-            raise AssertionError(msg)
-
-
-def test_models_loads_with_home_assistant_unreachable() -> None:
-    """`models.py` must import with the whole `homeassistant` package blocked.
+def test_models_loads_in_an_interpreter_without_home_assistant() -> None:
+    """`models.py` must load and parse in an interpreter that never imports HA.
 
     The contract is that the model layer is testable in complete isolation
-    (docs/04-architecture.md §4), so it is proven by loading the module while any
-    `homeassistant` import raises, not by reading the source text.
+    (docs/04-architecture.md §4). A fresh child interpreter proves it without
+    touching this process's `sys.modules`, and cannot be fooled by an already
+    imported `homeassistant`: the child is asked what it ended up loading.
     """
-    spec = importlib.util.spec_from_file_location(
-        "avisoscat_models_isolated", MODELS_SOURCE
-    )
-    assert spec is not None
-    assert spec.loader is not None
-    isolated = importlib.util.module_from_spec(spec)
-
-    # Purged first: `find_spec` is only consulted for a module not already loaded.
-    unloaded = _loaded_home_assistant_modules()
-    for name in unloaded:
-        del sys.modules[name]
-    blocker = _BlockHomeAssistant()
-    sys.meta_path.insert(0, blocker)
-    # `dataclasses` resolves the deferred annotations through `sys.modules`, so the
-    # module under test has to be registered while it executes.
-    sys.modules[spec.name] = isolated
     try:
-        spec.loader.exec_module(isolated)
-        assert _loaded_home_assistant_modules() == {}
-    finally:
-        del sys.modules[spec.name]
-        sys.meta_path.remove(blocker)
-        sys.modules.update(unloaded)
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", _ISOLATION_SCRIPT, str(MODELS_SOURCE)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as err:
+        pytest.fail(f"Could not run a child interpreter to load models.py: {err}")
 
+    assert result.returncode == 0, f"models.py failed to load:\n{result.stderr}"
+    report = json.loads(result.stdout)
+    assert report["home_assistant"] == []
     # What loaded in isolation is the real module, not an empty shell.
-    assert isolated.NivellPerill.from_perill(5.0) is isolated.NivellPerill.MOLT_ALT
-    assert isolated.is_closed("Ampliat") is False
+    assert report["meteor"] == "vent"
+    assert report["tipus"] == "avis"
+    assert report["is_open"] is True
+    assert report["molt_alt"] == "molt_alt"
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +381,63 @@ def test_trap_3_null_afectacions_becomes_an_empty_band() -> None:
     assert evolucio.periodes["06-12"] == ()
     assert len(evolucio.periodes["12-18"]) == 1
     assert evolucio.perill_maxim == 2
+
+
+def test_trap_3_a_null_collection_is_empty_without_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`null` is the documented shape of an empty collection, so it stays quiet."""
+    with caplog.at_level(logging.WARNING):
+        snapshot = parse_snapshot([_episodi(avisos=None)])
+
+    assert snapshot.episodis[0].avisos == ()
+    assert snapshot.episodis[0].meteor is Meteor.PLUJA_30MIN
+    assert not [rec for rec in caplog.records if rec.name == models.__name__]
+
+
+_NON_LIST_COLLECTIONS = [
+    ("avisos", _episodi(avisos=_avis()), lambda ep: ep.avisos),
+    (
+        "evolucions",
+        _episodi(avisos=[_avis(evolucions={"dia": "2026-08-04T00:00Z"})]),
+        lambda ep: ep.avisos[0].evolucions,
+    ),
+    (
+        "periodes",
+        _episodi(
+            avisos=[
+                _avis(
+                    evolucions=[
+                        {"dia": "2026-08-04T00:00Z", "periodes": {"nom": "12-18"}}
+                    ]
+                )
+            ]
+        ),
+        lambda ep: ep.avisos[0].evolucions[0].periodes,
+    ),
+]
+
+
+@pytest.mark.parametrize(("field", "episodi", "collection"), _NON_LIST_COLLECTIONS)
+def test_trap_3_a_collection_that_is_not_a_list_is_discarded_with_a_warning(
+    field: str,
+    episodi: dict,
+    collection: Callable[[Episodi], object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A single object where a list belongs empties the whole collection.
+
+    Unlike `null`, that shape is undocumented, so the loss has to leave a trace:
+    otherwise the integration reports no warning while the source has one.
+    """
+    with caplog.at_level(logging.WARNING):
+        snapshot = parse_snapshot([episodi])
+
+    parsed = snapshot.episodis[0]
+    assert not collection(parsed)
+    assert parsed.meteor is Meteor.PLUJA_30MIN  # the container itself survives
+    assert f"Discarding the SMP {field} collection" in caplog.text
+    assert "got dict" in caplog.text
 
 
 # ---------------------------------------------------------------------------
