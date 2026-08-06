@@ -52,11 +52,14 @@ Run the local gates listed in `CONTRIBUTING.md`: they are exactly what
 `.github/workflows/ci.yml` runs. `validate.yml` additionally runs hassfest and HACS
 validation.
 
-Two validation facts worth knowing before you debug them again:
+Three validation facts worth knowing before you debug them again:
 
 - hassfest rejects `config_flow: true` without a `config_flow.py` defining the flow handler.
 - HACS validation checks repository metadata too (topics, description, license, issues
   enabled), not just the files in this repo.
+- `ruff format` also formats the Python inside Markdown fences, so a code sketch added to
+  `docs/` fails the gate until it is formatted. Reinstall `requirements_dev.txt` if a stale
+  local `ruff` disagrees with CI.
 
 ## Maintaining this file
 
