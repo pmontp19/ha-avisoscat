@@ -35,18 +35,17 @@ those documents are the contract, so read the relevant section before changing b
 
 ## Tests
 
-- `pytest-homeassistant-custom-component` plus `aioresponses`; zero real network in tests.
+- Zero real network in tests.
 - Clock-dependent logic → the `clock` fixture (`FakeClock` in `tests/conftest.py`), never a
   real `sleep()` and never `freezegun`.
-- Minimum 95% coverage (`--cov-fail-under=95`, same as CI). Do not lower the gate to make a
-  change pass.
-- Fixtures under `tests/fixtures/` must be real captured responses, not invented ones.
+- Test stack, coverage gate and fixture rules → `CONTRIBUTING.md`. Do not lower the coverage
+  gate to make a change pass.
 
 ## Before opening or updating a PR
 
-`ruff check .`, `ruff format --check .` and
-`pytest --cov=custom_components/avisoscat --cov-fail-under=95` green: they are exactly the
-gates in `ci.yml`. `validate.yml` additionally runs hassfest and HACS validation.
+Run the local gates listed in `CONTRIBUTING.md`: they are exactly what
+`.github/workflows/ci.yml` runs. `validate.yml` additionally runs hassfest and HACS
+validation.
 
 Two validation facts worth knowing before you debug them again:
 
