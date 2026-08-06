@@ -35,13 +35,12 @@ ha-avisoscat/
 ├── tests/
 │   ├── fixtures/
 │   │   ├── smp_page_sample.html          # pàgina real retallada, payload intacte
-│   │   ├── smp_episodis_sample.json      # captura 2026-08-05 (2 episodis, estat "Ampliat")
-│   │   ├── smp_episodis_empty.json
 │   │   ├── smp_preavisos_sample.json
 │   │   ├── smp_temps_violent_sample.json
 │   │   └── comarquesAmbMar.json          # TopoJSON real capturat, només per als tests
 │   └── test_*.py
 ├── docs/01-…05-…md                 # aquests documents
+├── docs/captures/                  # captures reals; els tests hi llegeixen la base SMP
 ├── .github/workflows/{ci,validate}.yml
 ├── hacs.json · pyproject.toml · README.md · CONTRIBUTING.md · LICENSE
 ```
@@ -90,9 +89,9 @@ class ApiKeySource:  # api.meteo.cat amb x-api-key
     """Consulta /pronostic/v2/smp/episodis-oberts i /…/preavisos."""
 ```
 
-`SmpSnapshot` conté `episodis: list[Episodi]`, `preavisos: list[Preavis]`, `fetched_at` i
-`payload_hash` (per saltar-se el reprocessament quan res no ha canviat, l'equivalent barat
-del `Last-Modified` que `geosphere_austria_warnings` sí que té i nosaltres no).
+El `SmpSnapshot` el defineix el §4. El seu `payload_hash` hi és per saltar-se el
+reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` que
+`geosphere_austria_warnings` sí que té i nosaltres no.
 
 ### `PublicPageSource`
 
@@ -124,7 +123,7 @@ backoff 1s/2s/4s. Consulta `/quotes/v1/consum-actual` un cop al dia per alimenta
 Sense cap import de Home Assistant: testable en aïllament total, com `ha-incendiscat`.
 
 ```python
-class Meteor(str, Enum):
+class Meteor(StrEnum):
     VENT = "vent"
     PLUJA_30MIN = "pluja_30min"
     PLUJA_3H = "pluja_3h"
@@ -137,14 +136,14 @@ class Meteor(str, Enum):
     TEMPS_VIOLENT = "temps_violent"
 
 
-class TipusAvis(str, Enum):
+class TipusAvis(StrEnum):
     PREAVIS = "preavis"
     AVIS = "avis"
     VIGILANCIA = "vigilancia"
     TEMPS_VIOLENT = "temps_violent"
 
 
-class NivellPerill(str, Enum):
+class NivellPerill(StrEnum):
     """Codi semafòric oficial (grau 0-6 → 4 categories)."""
 
     CAP = "cap"  # 0
@@ -153,7 +152,7 @@ class NivellPerill(str, Enum):
     MOLT_ALT = "molt_alt"  # 5-6
 
     @classmethod
-    def from_perill(cls, perill: int) -> NivellPerill: ...
+    def from_perill(cls, perill: Any) -> NivellPerill: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,22 +162,24 @@ class Afectacio:
     nivell: int  # 1 = llindar baix, 2 = llindar alt
     llindar: str
     auxiliar: bool
-    dia: date
+    dia: date | None
 
 
 @dataclass(frozen=True, slots=True)
 class Evolucio:
-    dia: date
+    dia: date | None
     comentari: str
     llindar_baix: str | None
     llindar_alt: str | None
     distribucio_geografica: str | None
+    representatiu: int | None
     periodes: dict[str, tuple[Afectacio, ...]]  # "00-06" … "18-00"
 
 
 @dataclass(frozen=True, slots=True)
 class Avis:
-    tipus: TipusAvis
+    tipus: TipusAvis | None  # None si el literal no es reconeix (trap 9)
+    tipus_nom: str  # literal cru del Meteocat, sempre preservat
     estat: str
     data_emissio: datetime | None
     data_inici: datetime | None
@@ -192,7 +193,47 @@ class Episodi:
     meteor_nom: str  # nom cru del Meteocat, sempre preservat
     estat: str
     avisos: tuple[Avis, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Preavis:
+    """Forma pròpia: sense comarca ni franges (§6 de `01-data-sources.md`)."""
+
+    tipus: TipusAvis | None
+    tipus_nom: str
+    estat: str
+    perill: int
+    nivell: int
+    llindar: str
+    comentari: str
+    data_emissio: datetime | None
+    data_inici: datetime | None
+    data_fi: datetime | None
+    meteor: Meteor | None = None  # només l'endpoint amb clau l'envia
+    meteor_nom: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SmpSnapshot:
+    episodis: tuple[Episodi, ...] = ()
+    preavisos: tuple[Preavis, ...] = ()
+    fetched_at: datetime | None = None
+    payload_hash: str | None = None
 ```
+
+Tres decisions del model que no es llegeixen del sketch:
+
+- Els `date | None` i el `TipusAvis | None` són deliberats: un dia o un literal de
+  tipus il·legible no ha de descartar l'afectació ni l'avís sencers. El literal cru
+  sempre queda a `tipus_nom`, igual que `meteor_nom`.
+- Les col·leccions són tuples perquè els dataclasses congelats comparin per valor. És
+  el que permetrà al coordinator comparar snapshots amb `always_update=False` (§7).
+- `parse_snapshot()` **no llança mai**: entrada malformada → snapshot buit i un
+  warning. Cada entrada (episodi, avís, evolució, franja, afectació) se salta
+  individualment, de manera que un membre malformat no descarti els veïns sans.
+
+`is_closed(estat)` és pública precisament perquè `vigencia.py` (§5) necessita el
+mateix test de tancament.
 
 ### Els 11 traps de tolerància, codificats
 
@@ -200,16 +241,17 @@ Cadascun dels traps de [`01-data-sources.md`](01-data-sources.md) §6 té un hel
 
 | Trap | Implementació |
 | --- | --- |
-| Floats (`2.0`) | `_as_int(value, default)` amb `int(float(...))` dins d'un `try` |
-| `afectacions: null` | `periode.get("afectacions") or []` a tot arreu |
-| `estat: "Ampliat"` | **No es filtra per literal.** `_is_closed(estat)` només reconeix estats de tancament coneguts; qualsevol altra cosa es considera oberta i la vigència la decideix `vigencia.py` |
+| Floats (`2.0`) | `_as_int(value, default)` amb `int(float(...))` dins d'un `try` que absorbeix també `OverflowError`: `Infinity` i `1e999` són JSON vàlid |
+| `afectacions: null` | `_as_list(value, camp)`: el `null` documentat es llegeix com a cap entrada en silenci, qualsevol altre tipus com a cap entrada **amb** warning |
+| `estat: "Ampliat"` | **No es filtra per literal.** `is_closed(estat)` només reconeix estats de tancament coneguts; qualsevol altra cosa es considera oberta i la vigència la decideix `vigencia.py` |
 | Múltiples `avisos` per episodi | `_dedupe_avisos()`: agrupa per `(meteor, tipus)`, guanya el `data_emissio` més recent; empat → grau més alt |
 | Meteor desconegut | `_parse_meteor()` case-insensitive amb *prefix match*; retorna `None` + `_LOGGER.warning`, i `meteor_nom` conserva el text cru |
 | Tipus amb variants històriques | `_parse_tipus()` per `casefold()` + prefix (`"avís vigilància per temps violent"` abans que `"avís vigilància"`, abans que `"avís"`) |
 | `idMeteor: null` | Mai s'usa com a clau |
 | Franja `"18-00"` | La clau del `dict` ve del JSON, no d'una constant nostra |
 | `idComarca` desconegut | `comarques.nom(id)` → `f"Comarca {id}"` amb warning |
-| Text extern | Mai HTML; els atributs es publiquen tal qual i el README avisa |
+| Text extern | El model el desa verbatim, mai escapat ni reformat; mai HTML a l'altra banda (§11) i el README avisa |
+| Parseig explícit de dates | `_parse_datetime()` / `_parse_date()`: `None` + warning si el timestamp no es pot llegir, i naïf assumit UTC |
 
 ---
 

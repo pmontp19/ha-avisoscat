@@ -447,9 +447,9 @@ Els preavisos tenen una **forma diferent** (sense comarca ni franges):
 | :---: | --- | --- |
 | 1 | `estat` observat en viu com a **`"Ampliat"`**, però el JS oficial només compara amb `"Vigent"` | **Mai filtrar per literal.** Tractar com a actiu tot el que no estigui explícitament tancat i decidir la vigència amb `dataInici`/`dataFi` + la finestra de la franja |
 | 2 | `perill`, `idComarca`, `nivell`, `representatiu` arriben com a **floats** (`2.0`) | Convertir amb `int(float(x))` tolerant, mai indexar per la clau crua |
-| 3 | `afectacions` pot ser **`null`**, no `[]` | `p.get("afectacions") or []` |
+| 3 | `afectacions` pot ser **`null`**, no `[]` | Llegir-ho com a cap entrada, conservant la franja; mai iterar-hi directament |
 | 4 | Un episodi pot portar **diversos `avisos`** (emissions successives del mateix avís) | Desduplicar per (meteor, tipus) quedant-se el `dataEmisio` més recent; si empaten, el grau més alt |
-| 5 | `meteor.nom` i els llindars són **text lliure en català** | Mapatge case-insensitive amb fallback `unknown` + warning; no `KeyError`, no `raise` |
+| 5 | `meteor.nom` i els llindars són **text lliure en català** | Mapatge case-insensitive; si no es reconeix, `None` + warning conservant el nom cru; no `KeyError`, no `raise` |
 | 6 | `idMeteor` és **`null`** al payload públic | No dependre'n mai com a clau |
 | 7 | `idComarca` pot ser una comarca nova o una zona marítima | `comarques.nom(id)` retorna un nom llegible per defecte, amb warning i sense petar (§6 de [`04-architecture.md`](04-architecture.md)) |
 | 8 | La darrera franja es diu **`"18-00"`** i no `"18-24"` | Fer servir el valor del JSON |
