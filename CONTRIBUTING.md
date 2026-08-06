@@ -55,8 +55,10 @@ excluded and bumped by hand instead; the exact list and the reason for each entr
 - Clock-dependent logic uses the `clock` fixture (`FakeClock` in `tests/conftest.py`), never
   a real `sleep()` and never `freezegun`. Warning validity is entirely a function of the
   6-hour UTC band, so this covers most of the integration.
-- Fixtures under `tests/fixtures/` must be real captured `meteo.cat` responses, never
-  invented ones. If you change parsing, re-capture them.
+- Fixtures must be real captured `meteo.cat` responses, never invented ones. The captured
+  payloads live in `docs/captures/` and the tests read them from there; only test-only
+  artefacts (trimmed pages, hand-built malformed input) belong under `tests/fixtures/`. If
+  you change parsing, re-capture them.
 
 ## User-facing strings
 
