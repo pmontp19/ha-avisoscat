@@ -1,7 +1,9 @@
 # Brand assets
 
-`icon.png` (256×256, transparent background) and its `icon@2x.png` variant go
-here, then get submitted to [`home-assistant/brands`](https://github.com/home-assistant/brands)
-under the `avisoscat` domain — HACS and the HA frontend read the logo from that
-repository, not from this one. The `brands` quality-scale rule stays `todo`
-until both the files and the upstream PR exist.
+`icon.png` (256×256, square, transparent background) and `icon@2x.png` (512×512)
+go here, in this directory. Home Assistant >= 2026.3 serves them through the
+Brands Proxy API, so no upstream submission is involved: `home-assistant/brands`
+no longer accepts new custom integrations. `ha-incendiscat` tracks exactly those
+two files under `custom_components/incendiscat/brand/`.
+
+The `brands` quality-scale rule stays `todo` until both files exist.
