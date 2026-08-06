@@ -9,9 +9,12 @@ escaped: dropping data silently is exactly the failure mode these traps exist to
 prevent.
 """
 
+import importlib.util
 import json
 import logging
+import sys
 from datetime import UTC, date, datetime
+from importlib.abc import MetaPathFinder
 from pathlib import Path
 
 import pytest
@@ -80,7 +83,7 @@ def _afectacio(**overrides) -> dict:
     } | overrides
 
 
-def _with_periodes(*periodes: dict) -> dict:
+def _with_periodes(*periodes: object) -> dict:
     """An episode whose single warning has one evolution with these bands."""
     evolucio = {
         "dia": "2026-08-04T00:00Z",
@@ -104,9 +107,61 @@ def _only_evolucio(snapshot: SmpSnapshot) -> Evolucio:
 # ---------------------------------------------------------------------------
 
 
-def test_models_never_imports_home_assistant() -> None:
-    """`models.py` must stay testable in complete isolation from HA."""
-    assert "homeassistant" not in MODELS_SOURCE.read_text(encoding="utf-8")
+def _loaded_home_assistant_modules() -> dict[str, object]:
+    """Every `homeassistant` module currently in `sys.modules`."""
+    return {
+        name: module
+        for name, module in list(sys.modules.items())
+        if name == "homeassistant" or name.startswith("homeassistant.")
+    }
+
+
+class _BlockHomeAssistant(MetaPathFinder):
+    """An import hook that makes the `homeassistant` package unreachable."""
+
+    def find_spec(
+        self, fullname: str, path: object = None, target: object = None
+    ) -> None:
+        """Fail loudly on a `homeassistant` import; `None` defers everything else."""
+        if fullname == "homeassistant" or fullname.startswith("homeassistant."):
+            msg = f"models.py must not import {fullname}"
+            raise AssertionError(msg)
+
+
+def test_models_loads_with_home_assistant_unreachable() -> None:
+    """`models.py` must import with the whole `homeassistant` package blocked.
+
+    The contract is that the model layer is testable in complete isolation
+    (docs/04-architecture.md §4), so it is proven by loading the module while any
+    `homeassistant` import raises, not by reading the source text.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "avisoscat_models_isolated", MODELS_SOURCE
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    isolated = importlib.util.module_from_spec(spec)
+
+    # Purged first: `find_spec` is only consulted for a module not already loaded.
+    unloaded = _loaded_home_assistant_modules()
+    for name in unloaded:
+        del sys.modules[name]
+    blocker = _BlockHomeAssistant()
+    sys.meta_path.insert(0, blocker)
+    # `dataclasses` resolves the deferred annotations through `sys.modules`, so the
+    # module under test has to be registered while it executes.
+    sys.modules[spec.name] = isolated
+    try:
+        spec.loader.exec_module(isolated)
+        assert _loaded_home_assistant_modules() == {}
+    finally:
+        del sys.modules[spec.name]
+        sys.meta_path.remove(blocker)
+        sys.modules.update(unloaded)
+
+    # What loaded in isolation is the real module, not an empty shell.
+    assert isolated.NivellPerill.from_perill(5.0) is isolated.NivellPerill.MOLT_ALT
+    assert isolated.is_closed("Ampliat") is False
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +195,11 @@ def test_from_perill_official_mapping(perill: int, expected: NivellPerill) -> No
         (9, NivellPerill.MOLT_ALT),
         (None, NivellPerill.CAP),
         ("tempesta", NivellPerill.CAP),
+        # `json.loads` accepts these, and `int(float(...))` overflows on them.
+        (float("inf"), NivellPerill.CAP),
+        (float("-inf"), NivellPerill.CAP),
+        ("Infinity", NivellPerill.CAP),
+        ("1e999", NivellPerill.CAP),
     ],
 )
 def test_from_perill_is_tolerant(perill: object, expected: NivellPerill) -> None:
@@ -243,6 +303,30 @@ def test_trap_2_unreadable_numbers_fall_back_without_raising() -> None:
     assert afectacio.perill == 0
     assert afectacio.id_comarca == 0
     assert afectacio.nivell == 1
+
+
+def test_trap_2_infinite_numbers_do_not_discard_a_healthy_episode() -> None:
+    """`Infinity` is valid JSON, and `int(float("inf"))` raises `OverflowError`.
+
+    An overflow escaping the per-entry guards would land in the snapshot-wide net
+    and take every healthy episode of the payload down with it.
+    """
+    infinite = _with_periodes(
+        {
+            "nom": "12-18",
+            "afectacions": [
+                _afectacio(perill=float("inf"), idComarca="Infinity", nivell="1e999")
+            ],
+        }
+    )
+    healthy = _episodi(meteor={"idMeteor": None, "nom": "Vent"})
+    snapshot = parse_snapshot([infinite, healthy])
+
+    afectacio = _only_evolucio(snapshot).periodes["12-18"][0]
+    assert (afectacio.perill, afectacio.id_comarca, afectacio.nivell) == (0, 0, 1)
+    assert afectacio.nivell_perill is NivellPerill.CAP
+    assert len(snapshot.episodis) == 2
+    assert snapshot.episodis[1].meteor is Meteor.VENT
 
 
 @pytest.mark.parametrize(
@@ -475,6 +559,30 @@ def test_trap_8_band_keys_come_from_the_json() -> None:
     periodes = _only_evolucio(snapshot).periodes
     assert list(periodes) == ["00-06", "06-12", "12-18", "18-00", "franja-nova"]
     assert "18-24" not in periodes
+
+
+def test_trap_8_unusable_bands_are_skipped_with_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A band that is not an object, or has no name, must not vanish silently.
+
+    Its affectations are dropped with it, so the skip has to be traceable in the
+    log like every other skipped entry.
+    """
+    with caplog.at_level(logging.WARNING):
+        snapshot = parse_snapshot(
+            [
+                _with_periodes(
+                    "not an object",
+                    {"afectacions": [_afectacio()]},
+                    {"nom": "12-18", "afectacions": [_afectacio()]},
+                )
+            ]
+        )
+
+    assert list(_only_evolucio(snapshot).periodes) == ["12-18"]
+    assert "non-object SMP time band" in caplog.text
+    assert "unnamed SMP time band" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -725,13 +833,23 @@ def test_parse_snapshot_carries_fetch_metadata() -> None:
     assert snapshot.payload_hash == "abc123"
 
 
-def test_snapshot_defaults_are_empty_and_hashable() -> None:
-    """The dataclasses are frozen, so the coordinator can compare snapshots."""
+def test_snapshot_defaults_are_empty_and_compare_by_value() -> None:
+    """The dataclasses are frozen with tuple collections, so equality is by value.
+
+    Equality is all the coordinator needs for `always_update=False`
+    (docs/04-architecture.md §7): `Evolucio.periodes` is a `dict`, as the contract
+    specifies, so a parsed snapshot is deliberately not hashable.
+    """
     assert SmpSnapshot().is_empty is True
-    assert hash(SmpSnapshot()) == hash(SmpSnapshot())
+    assert SmpSnapshot() == SmpSnapshot()
     assert Episodi(Meteor.VENT, "Vent", "Obert", ()) == Episodi(
         Meteor.VENT, "Vent", "Obert", ()
     )
+
+    band = {"nom": "12-18", "afectacions": [_afectacio()]}
+    populated = parse_snapshot([_with_periodes(band)])
+    assert populated == parse_snapshot([_with_periodes(band)])
+    assert populated != SmpSnapshot()
 
 
 # ---------------------------------------------------------------------------

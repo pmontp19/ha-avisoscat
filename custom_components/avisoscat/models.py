@@ -26,13 +26,14 @@ direction of more tolerance:
 - `tipus` is `TipusAvis | None` with the raw `tipus_nom` kept beside it, exactly
   like `meteor` / `meteor_nom`, because the type literal has historical variants
   (trap #9) and an unrecognised one must not discard the warning.
-- The collections are tuples so the dataclasses stay frozen and hashable, which
+- The collections are tuples, so the frozen dataclasses compare by value, which
   is what lets the coordinator compare snapshots with `always_update=False`.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -214,10 +215,14 @@ _TRUE_LITERALS = frozenset({"true", "t", "1", "yes", "si", "cert"})
 
 
 def _as_int(value: Any, default: int = 0) -> int:
-    """Convert to `int` through `float`, because `2.0` is what arrives (trap #2)."""
+    """Convert to `int` through `float`, because `2.0` is what arrives (trap #2).
+
+    `OverflowError` is absorbed too: `json.loads` accepts `Infinity` and `1e999`,
+    and `int(float("inf"))` raises rather than returning a number.
+    """
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return default
 
 
@@ -248,6 +253,16 @@ def _as_str(value: Any, default: str = "") -> str:
 def _as_optional_str(value: Any) -> str | None:
     """Like `_as_str`, but keeps the difference between absent and empty."""
     return value if isinstance(value, str) else None
+
+
+def _as_list(value: Any) -> list[Any]:
+    """Read a list field, which arrives as `null` instead of `[]` (trap #3).
+
+    That is the whole of trap #3 in one function: the `null` the feed sends for an
+    empty collection, and anything else that is not a list, reads as no entries.
+    The container that holds the field is not affected by its emptiness.
+    """
+    return value if isinstance(value, list) else []
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -458,6 +473,31 @@ class SmpSnapshot:
 # ---------------------------------------------------------------------------
 
 
+def _parse_all[T](
+    raw_entries: Iterable[Any], parse: Callable[[Any], T | None]
+) -> tuple[T, ...]:
+    """Parse every entry of a collection, dropping the ones the parser rejects.
+
+    A parser returns `None` for an entry it cannot use, having logged why, so one
+    malformed member never discards its healthy neighbours.
+    """
+    return tuple(
+        parsed for parsed in (parse(raw) for raw in raw_entries) if parsed is not None
+    )
+
+
+def _read_meteor(raw: dict[str, Any]) -> tuple[Meteor | None, str]:
+    """Read the `meteor` object as the resolved enum plus the raw Catalan name.
+
+    `idMeteor` is `null` in the public payload (trap #6): only the name is ever
+    read, and never as a lookup key. An unrecognised name resolves to `None` while
+    the raw text is kept, so nothing is lost (trap #5).
+    """
+    raw_meteor = raw.get("meteor")
+    nom = _as_str(raw_meteor.get("nom")) if isinstance(raw_meteor, dict) else ""
+    return _parse_meteor(nom), nom
+
+
 def _parse_afectacio(raw: Any) -> Afectacio | None:
     """Parse one affectation; `None` when the entry is not even an object."""
     if not isinstance(raw, dict):
@@ -476,24 +516,18 @@ def _parse_afectacio(raw: Any) -> Afectacio | None:
 def _parse_periodes(raw_periodes: Any) -> dict[str, tuple[Afectacio, ...]]:
     """Build the band → affectations mapping, keyed by the JSON's own names."""
     periodes: dict[str, tuple[Afectacio, ...]] = {}
-    if not isinstance(raw_periodes, list):
-        return periodes
-    for raw_periode in raw_periodes:
+    for raw_periode in _as_list(raw_periodes):
         if not isinstance(raw_periode, dict):
+            _LOGGER.warning("Skipping non-object SMP time band %r", raw_periode)
             continue
         nom = _as_str(raw_periode.get("nom"))
         if not nom:
+            _LOGGER.warning("Skipping unnamed SMP time band %r", raw_periode)
             continue
         # `afectacions` is `null`, not `[]`, on a band with nothing in it
-        # (trap #3). The band itself must still appear as a key.
-        raw_afectacions = raw_periode.get("afectacions") or []
-        if not isinstance(raw_afectacions, list):
-            raw_afectacions = []
-        parsed = tuple(
-            af
-            for af in (_parse_afectacio(raw) for raw in raw_afectacions)
-            if af is not None
-        )
+        # (trap #3, absorbed by `_as_list`). The band itself still becomes a key.
+        raw_afectacions = _as_list(raw_periode.get("afectacions"))
+        parsed = _parse_all(raw_afectacions, _parse_afectacio)
         periodes[nom] = periodes.get(nom, ()) + parsed
     return periodes
 
@@ -520,9 +554,6 @@ def _parse_avis(raw: Any) -> Avis | None:
     if not isinstance(raw, dict):
         _LOGGER.warning("Skipping non-object SMP warning %r", raw)
         return None
-    raw_evolucions = raw.get("evolucions") or []
-    if not isinstance(raw_evolucions, list):
-        raw_evolucions = []
     tipus_nom = _as_str(raw.get("tipus"))
     return Avis(
         tipus=_parse_tipus(tipus_nom),
@@ -532,11 +563,7 @@ def _parse_avis(raw: Any) -> Avis | None:
         data_emissio=_parse_datetime(raw.get("dataEmisio")),
         data_inici=_parse_datetime(raw.get("dataInici")),
         data_fi=_parse_datetime(raw.get("dataFi")),
-        evolucions=tuple(
-            ev
-            for ev in (_parse_evolucio(raw_ev) for raw_ev in raw_evolucions)
-            if ev is not None
-        ),
+        evolucions=_parse_all(_as_list(raw.get("evolucions")), _parse_evolucio),
     )
 
 
@@ -576,20 +603,10 @@ def _parse_episodi(raw: Any) -> Episodi | None:
     if not isinstance(raw, dict):
         _LOGGER.warning("Skipping non-object SMP episode %r", raw)
         return None
-    # `idMeteor` is `null` in the public payload (trap #6): only the name is
-    # ever read, and never as a lookup key.
-    raw_meteor = raw.get("meteor")
-    meteor_nom = _as_str(raw_meteor.get("nom")) if isinstance(raw_meteor, dict) else ""
-    raw_avisos = raw.get("avisos") or []
-    if not isinstance(raw_avisos, list):
-        raw_avisos = []
-    avisos = tuple(
-        avis
-        for avis in (_parse_avis(raw_avis) for raw_avis in raw_avisos)
-        if avis is not None
-    )
+    meteor, meteor_nom = _read_meteor(raw)
+    avisos = _parse_all(_as_list(raw.get("avisos")), _parse_avis)
     return Episodi(
-        meteor=_parse_meteor(meteor_nom),
+        meteor=meteor,
         meteor_nom=meteor_nom,
         estat=_parse_estat(raw.get("estat")),
         avisos=_dedupe_avisos(avisos),
@@ -602,8 +619,8 @@ def _parse_preavis(raw: Any) -> Preavis | None:
         _LOGGER.warning("Skipping non-object SMP pre-warning %r", raw)
         return None
     tipus_nom = _as_str(raw.get("tipus"))
-    raw_meteor = raw.get("meteor")
-    meteor_nom = _as_str(raw_meteor.get("nom")) if isinstance(raw_meteor, dict) else ""
+    # The API-key endpoint may wrap a meteor in; the public flat shape does not.
+    meteor, meteor_nom = _read_meteor(raw)
     return Preavis(
         tipus=_parse_tipus(tipus_nom) or TipusAvis.PREAVIS,
         tipus_nom=tipus_nom,
@@ -615,7 +632,7 @@ def _parse_preavis(raw: Any) -> Preavis | None:
         data_emissio=_parse_datetime(raw.get("dataEmisio")),
         data_inici=_parse_datetime(raw.get("dataInici")),
         data_fi=_parse_datetime(raw.get("dataFi")),
-        meteor=_parse_meteor(meteor_nom) if meteor_nom else None,
+        meteor=meteor,
         meteor_nom=meteor_nom,
     )
 
@@ -658,16 +675,8 @@ def parse_snapshot(
     one bad episode does not discard the good ones beside it.
     """
     try:
-        episodis = tuple(
-            ep
-            for ep in (_parse_episodi(raw) for raw in _flatten(episodis_raw))
-            if ep is not None
-        )
-        preavisos = tuple(
-            pre
-            for pre in (_parse_preavis(raw) for raw in _flatten(preavisos_raw))
-            if pre is not None
-        )
+        episodis = _parse_all(_flatten(episodis_raw), _parse_episodi)
+        preavisos = _parse_all(_flatten(preavisos_raw), _parse_preavis)
     # Broad on purpose: a shape we have never seen must degrade to "no data",
     # never propagate out of the model layer.
     except Exception as err:
