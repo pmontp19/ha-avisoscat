@@ -25,6 +25,10 @@ those documents are the contract, so read the relevant section before changing b
 - The keyless `meteo.cat` inline payload is **not** an official API and can change without
   notice: read fields with `.get()` plus a default, never direct indexing, and keep the last
   good state on failure instead of clearing it.
+- The payload is not stable byte for byte between requests even when the warnings have not
+  changed: the `afectacions` list comes back rotated. Any payload hash or snapshot comparison
+  must be order-insensitive or it reports a change every cycle
+  (`docs/captures/smp-page-choice-2026-08-06.md`).
 - `comentari`, `llindar` and `meteor_nom` are untrusted external text: never `allow_html`,
   never direct HTML interpolation. Diagnostics must keep redacting `latitude`, `longitude`
   and `api_key`.

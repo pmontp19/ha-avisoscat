@@ -18,7 +18,7 @@ ha-avisoscat/
 │       ├── const.py                # domini, URLs, defaults, claus de config
 │       ├── coordinator.py          # AvisoscatDataUpdateCoordinator + events
 │       ├── smp.py                  # client dual: font pública / API oficial
-│       ├── parser.py               # extracció del payload inline + normalització
+│       ├── parser.py               # extracció del payload inline (JSON cru, res més)
 │       ├── models.py               # dataclasses i enums, sense imports de HA
 │       ├── comarques.py            # taula estàtica id→nom + point-in-polygon
 │       ├── vigencia.py             # "és vigent ara?" (franges de 6 h UTC)
@@ -93,21 +93,48 @@ El `SmpSnapshot` el defineix el §4. El seu `payload_hash` hi és per saltar-se 
 reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` que
 `geosphere_austria_warnings` sí que té i nosaltres no.
 
+⚠️ El hash s'ha de calcular sobre una forma **canonicalitzada, insensible a l'ordre** del
+payload: la llista `afectacions` torna **rotada** entre peticions encara que les dades
+siguin idèntiques, de manera que un hash del payload cru canviaria a cada cicle i no
+estalviaria res (ni ell ni l'`always_update=False` del §7)
+(`docs/captures/smp-page-choice-2026-08-06.md`). Aquesta canonicalització **encara no està
+implementada**: la tanca la mateixa tasca futura que ha de llegir `afectacions` al model
+(trap 12 de [`01-data-sources.md`](01-data-sources.md) §6).
+
 ### `PublicPageSource`
 
 1. `GET` amb `Accept-Encoding: gzip` a `SMP_PAGE_URL`
    (`https://www.meteo.cat/observacions/radar`, ~57 KB gzip), amb
-   `https://www.meteo.cat/` com a *fallback* si l'extracció no troba episodis.
+   `https://www.meteo.cat/` com a *fallback* **només si la pàgina primària falla**:
+   error de descàrrega o `SmpParseError`. Un resultat buit **no** activa el
+   *fallback*: cap episodi obert és la resposta normal d'un dia tranquil i, com que les
+   dues pàgines retornen el mateix payload byte a byte, el *fallback* no pot aportar
+   episodis que la primària no tingués ja (`docs/captures/smp-page-choice-2026-08-06.md`).
+   El *fallback* hi és per disponibilitat, no per completesa.
 2. Localitzar `Meteocat.avisosSMP(`.
 3. A partir d'aquell offset, per a cada clau (`avisos:`, `episodisPreavisos:`), extreure
    l'array amb un **comptador de claudàtors equilibrat** que ignori els que van dins de
    cadenes. Res de regex greedy: el payload conté `[` i `]` dins de `comentari`.
-4. Descartar els arrays buits (l'objecte `opcions` també té una clau `avisos`, buida) i
-   quedar-se amb el primer que contingui episodis.
+4. Les claus es llegeixen **només al primer nivell** de l'objecte d'arguments de la
+   crida (una comprovació de profunditat), de manera que ni la clau `avisos` buida de
+   l'objecte `opcions` ni la clau `avisos` que porta cada episodi del payload no hi
+   poden entrar: queden estructuralment excloses en lloc de només descartades. Entre
+   els candidats resultants es tria el **més ric**, no el primer que contingui
+   episodis: la portada renderitza la crida dues vegades (un visor d'1 dia i un giny
+   de 3 dies) i el joc d'1 dia és un subconjunt estricte de l'altre, per tant
+   quedar-se amb el primer descartaria en silenci els avisos de demà
+   (`docs/captures/smp-page-choice-2026-08-06.md`). Un candidat sense cap episodi es
+   col·lapsa a `[]`, de manera que `[]`, `[[]]` i `[[],[],[]]` donen la mateixa
+   resposta buida.
 5. `json.loads` → `models.parse_snapshot()`.
 
-Si el pas 2 o el 4 fallen, es llança `SmpParseError` — mai una excepció crua. Tres
-fallades seguides disparen `avisoscat_service_degraded` i una *repair issue*.
+Es llança `SmpParseError`, mai una excepció crua, quan el marcatge no es pot llegir:
+no hi ha cap crida `Meteocat.avisosSMP(`, no hi ha clau `avisos` al primer nivell de la
+crida, o el seu valor no descodifica. Un resultat buit del pas 4 **no** és una fallada:
+és el dia tranquil. Una clau `episodisPreavisos` absent tampoc no ho és: avisa i degrada
+a `[]`, perquè perdre els preavisos (una ajuda de planificació a 3 dies) seria un mal
+motiu per descartar avisos vigents ara mateix. Tres fallades seguides disparen
+`avisoscat_service_degraded` i una *repair issue*.
 
 ### `ApiKeySource`
 
@@ -235,9 +262,12 @@ Tres decisions del model que no es llegeixen del sketch:
 `is_closed(estat)` és pública precisament perquè `vigencia.py` (§5) necessita el
 mateix test de tancament.
 
-### Els 11 traps de tolerància, codificats
+### Els traps de tolerància, codificats
 
-Cadascun dels traps de [`01-data-sources.md`](01-data-sources.md) §6 té un helper i un test:
+Els **11 primers** traps de [`01-data-sources.md`](01-data-sources.md) §6 tenen un helper i
+un test. El **trap 12** (l'avís de temps violent amb `afectacions` penjant directament de
+l'avís) es va documentar més tard i **encara no està implementat**: l'abast i la conseqüència
+(`perill_maxim == 0` en un avís vigent) són al §6 d'aquell document.
 
 | Trap | Implementació |
 | --- | --- |
@@ -449,7 +479,7 @@ referència.
 
 | Fallada | Comportament |
 | --- | --- |
-| Timeout / xarxa | 3 retries amb backoff 1s/2s/4s → `service_connected = false`, es conserva l'estat cachejat |
+| Timeout / xarxa | 3 retries amb backoff 1s/2s/4s; si s'esgoten, es prova el *fallback* `https://www.meteo.cat/` (§3, pas 1) i, si aquest també falla, `service_connected = false` i es conserva l'estat cachejat |
 | Pàgina pública canvia de marcatge (`SmpParseError`) | Es prova el *fallback* `https://www.meteo.cat/`; si també falla, es conserva l'estat i s'incrementa el comptador |
 | HTTP 403 amb API key | `ConfigEntryAuthFailed` → flux de reauth |
 | HTTP 429 | `UpdateFailed` + interval duplicat temporalment. **Cap retry** (cremaria quota) |
@@ -463,8 +493,10 @@ referència.
 - **Adaptatiu** amb la font pública: 30 min sense cap episodi obert, 10 min quan n'hi ha
   algun (§6 de `03-feature-spec.md`). El 10 min només es justifica pel nowcast de temps
   violent, que només apareix en situacions convectives.
-- Mínim absolut **10 minuts**: `cache-control: max-age=600`. Sondejar més sovint és
-  consumir amplada de banda d'un servei públic per a res.
+- Mínim absolut **10 minuts**: és un terra **nostre**, no de la font. La pàgina primària
+  envia `cache-control: max-age=180` (mesurat 2026-08-06), de manera que 10 minuts és
+  deliberadament més conservador del que la font demana: sondejar més sovint seria consumir
+  amplada de banda d'un servei públic sense necessitat.
 - Amb API key, l'interval el marca la quota, mai l'usuari sol.
 - El recàlcul de vigència per canvi de franja és **local**: no genera cap petició. És el
   que permet que el sondeig sigui lent sense que els events arribin tard.
@@ -494,13 +526,14 @@ Cobertura mínima **95%** (`--cov-fail-under=95`, igual que CI).
 Fixtures **reals capturades**, mai inventades. La captura base ja existeix: payload del
 2026-08-05 amb dos episodis d'intensitat de pluja en estat `Ampliat`, franges buides
 (`afectacions: null`) i plenes, i floats a `perill`/`idComarca`/`nivell` — cobreix 5 dels
-11 traps ella sola.
+12 traps ella sola.
 
 Casos obligatoris:
 
 - `test_parser.py`: extracció del payload de la pàgina real, claudàtors dins de cadenes,
   `avisos` buit d'`opcions` ignorat, pàgina sense episodis.
-- `test_models.py`: un test per cada trap de `01-data-sources.md` §6.
+- `test_models.py`: un test per cada trap implementat de `01-data-sources.md` §6 (el 12
+  encara no ho està).
 - `test_vigencia.py`: canvi de franja a 12:00 UTC, avís que acaba a mitja franja, temps
   violent i la seva finestra de 2 h, horari d'estiu vs hivern.
 - `test_coordinator.py`: anunci/inici/pujada/baixada/resolució i els seus events; un

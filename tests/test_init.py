@@ -82,7 +82,11 @@ def test_documented_endpoints_are_defined() -> None:
 
 
 def test_polling_defaults_respect_the_cache_floor() -> None:
-    """Adaptive polling stays within the source's `max-age=600` floor."""
+    """Adaptive polling keeps our own 10-minute floor (see `const.py`).
+
+    The floor is ours, not the source's: the primary page sends
+    `cache-control: max-age=180` (docs/captures/smp-page-choice-2026-08-06.md).
+    """
     assert const.DEFAULT_SCAN_INTERVAL_IDLE_MINUTES == 30
     assert const.DEFAULT_SCAN_INTERVAL_ACTIVE_MINUTES == 10
     assert const.MIN_SCAN_INTERVAL_MINUTES == 10
