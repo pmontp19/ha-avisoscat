@@ -18,7 +18,7 @@ ha-avisoscat/
 │       ├── const.py                # domini, URLs, defaults, claus de config
 │       ├── coordinator.py          # AvisoscatDataUpdateCoordinator + events
 │       ├── smp.py                  # client dual: font pública / API oficial
-│       ├── parser.py               # extracció del payload inline + normalització
+│       ├── parser.py               # extracció del payload inline (JSON cru, res més)
 │       ├── models.py               # dataclasses i enums, sense imports de HA
 │       ├── comarques.py            # taula estàtica id→nom + point-in-polygon
 │       ├── vigencia.py             # "és vigent ara?" (franges de 6 h UTC)
@@ -92,6 +92,12 @@ class ApiKeySource:  # api.meteo.cat amb x-api-key
 El `SmpSnapshot` el defineix el §4. El seu `payload_hash` hi és per saltar-se el
 reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` que
 `geosphere_austria_warnings` sí que té i nosaltres no.
+
+⚠️ El hash s'ha de calcular sobre una forma **canonicalitzada, insensible a l'ordre** del
+payload: la llista `afectacions` torna **rotada** entre peticions encara que les dades
+siguin idèntiques, de manera que un hash del payload cru canviaria a cada cicle i no
+estalviaria res (ni ell ni l'`always_update=False` del §7)
+(`docs/captures/smp-page-choice-2026-08-06.md`).
 
 ### `PublicPageSource`
 
@@ -254,9 +260,12 @@ Tres decisions del model que no es llegeixen del sketch:
 `is_closed(estat)` és pública precisament perquè `vigencia.py` (§5) necessita el
 mateix test de tancament.
 
-### Els 11 traps de tolerància, codificats
+### Els traps de tolerància, codificats
 
-Cadascun dels traps de [`01-data-sources.md`](01-data-sources.md) §6 té un helper i un test:
+Els **11 primers** traps de [`01-data-sources.md`](01-data-sources.md) §6 tenen un helper i
+un test. El **trap 12** (l'avís de temps violent amb `afectacions` penjant directament de
+l'avís) es va documentar més tard i **encara no està implementat**: l'abast i la conseqüència
+(`perill_maxim == 0` en un avís vigent) són al §6 d'aquell document.
 
 | Trap | Implementació |
 | --- | --- |
@@ -515,13 +524,14 @@ Cobertura mínima **95%** (`--cov-fail-under=95`, igual que CI).
 Fixtures **reals capturades**, mai inventades. La captura base ja existeix: payload del
 2026-08-05 amb dos episodis d'intensitat de pluja en estat `Ampliat`, franges buides
 (`afectacions: null`) i plenes, i floats a `perill`/`idComarca`/`nivell` — cobreix 5 dels
-11 traps ella sola.
+12 traps ella sola.
 
 Casos obligatoris:
 
 - `test_parser.py`: extracció del payload de la pàgina real, claudàtors dins de cadenes,
   `avisos` buit d'`opcions` ignorat, pàgina sense episodis.
-- `test_models.py`: un test per cada trap de `01-data-sources.md` §6.
+- `test_models.py`: un test per cada trap implementat de `01-data-sources.md` §6 (el 12
+  encara no ho està).
 - `test_vigencia.py`: canvi de franja a 12:00 UTC, avís que acaba a mitja franja, temps
   violent i la seva finestra de 2 h, horari d'estiu vs hivern.
 - `test_coordinator.py`: anunci/inici/pujada/baixada/resolució i els seus events; un
