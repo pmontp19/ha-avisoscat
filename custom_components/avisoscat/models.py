@@ -5,7 +5,7 @@ testable in complete isolation (docs/04-architecture.md §4). It takes already
 decoded JSON and returns typed objects. No network, no I/O, no HTML.
 
 The keyless `meteo.cat` inline payload is not an official API, so every field is
-read with `.get()` plus a default and every conversion is tolerant. The eleven
+read with `.get()` plus a default and every conversion is tolerant. The twelve
 tolerance traps of docs/01-data-sources.md §6 are implemented here; each one has
 a dedicated test in `tests/test_models.py`.
 
@@ -28,10 +28,19 @@ direction of more tolerance:
   (trap #9) and an unrecognised one must not discard the warning.
 - The collections are tuples, so the frozen dataclasses compare by value, which
   is what lets the coordinator compare snapshots with `always_update=False`.
+- `Avis` carries its own `afectacions` field, not only in the sketch's
+  `evolucions`: a "temps violent" vigilance avis hangs its affectations
+  directly off the avis, with no `evolucions`/`periodes` wrapper (trap #12).
+- `compute_payload_hash()` exists because the feed rotates `afectacions`
+  between requests even when nothing changed (docs/01-data-sources.md §6,
+  trap #12's companion note at §3.1): a hash of the raw payload must
+  canonicalise list order first, or it would flip every cycle for no reason.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -402,6 +411,10 @@ class Avis:
     data_inici: datetime | None
     data_fi: datetime | None
     evolucions: tuple[Evolucio, ...]
+    # Only a "temps violent" vigilance avis carries these: `afectacions` hangs
+    # directly off the avis, with no `evolucions`/`periodes` wrapper (trap #12).
+    # Its validity window is 2 h from `data_emissio`, not a 6-hour band.
+    afectacions: tuple[Afectacio, ...] = ()
 
     @property
     def is_open(self) -> bool:
@@ -410,8 +423,15 @@ class Avis:
 
     @property
     def perill_maxim(self) -> int:
-        """Highest grade across every day and band of this emission."""
-        return max((ev.perill_maxim for ev in self.evolucions), default=0)
+        """Highest grade across every day and band of this emission.
+
+        Includes the grade of any affectation carried directly on the avis
+        (trap #12): without it, a "temps violent" vigilance avis has no
+        `evolucions` at all and its real grade would silently read as 0.
+        """
+        grades = [ev.perill_maxim for ev in self.evolucions]
+        grades.extend(af.perill for af in self.afectacions)
+        return max(grades, default=0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -577,6 +597,11 @@ def _parse_avis(raw: Any) -> Avis | None:
         evolucions=_parse_all(
             _as_list(raw.get("evolucions"), "evolucions"), _parse_evolucio
         ),
+        # `avis["afectacions"]`, not `avis["evolucions"][...]["periodes"][...]`:
+        # the shape a "temps violent" vigilance avis actually uses (trap #12).
+        afectacions=_parse_all(
+            _as_list(raw.get("afectacions"), "afectacions"), _parse_afectacio
+        ),
     )
 
 
@@ -648,6 +673,41 @@ def _parse_preavis(raw: Any) -> Preavis | None:
         meteor=meteor,
         meteor_nom=meteor_nom,
     )
+
+
+def _canonicalize_for_hash(value: Any) -> Any:
+    """Recursively sort list entries so equal content hashes equal regardless of order.
+
+    Dict key order never matters (`json.dumps(..., sort_keys=True)` handles that),
+    but list order does: the feed returns `afectacions` rotated between requests
+    for identical content (docs/01-data-sources.md §6, trap #12's companion note
+    at §3.1). Every list is sorted here, keyed by its own canonical JSON form, so
+    the sort is well-defined regardless of what the list holds.
+    """
+    if isinstance(value, dict):
+        return {key: _canonicalize_for_hash(val) for key, val in value.items()}
+    if isinstance(value, list):
+        items = [_canonicalize_for_hash(item) for item in value]
+        return sorted(
+            items, key=lambda item: json.dumps(item, sort_keys=True, default=str)
+        )
+    return value
+
+
+def compute_payload_hash(episodis_raw: Any = None, preavisos_raw: Any = None) -> str:
+    """Stable hash of a raw SMP payload, insensitive to its unstable list order.
+
+    Hashing the raw payload as received would flip on every poll even when
+    nothing changed, defeating `always_update=False` (docs/04-architecture.md
+    §3). This canonicalises first, so the same content always produces the same
+    digest no matter how the feed happened to order its lists.
+    """
+    canonical = json.dumps(
+        _canonicalize_for_hash({"episodis": episodis_raw, "preavisos": preavisos_raw}),
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def _flatten(raw: Any) -> list[Any]:

@@ -29,6 +29,7 @@ from custom_components.avisoscat.models import (
     Preavis,
     SmpSnapshot,
     TipusAvis,
+    compute_payload_hash,
     is_closed,
     parse_snapshot,
 )
@@ -776,6 +777,141 @@ def test_naive_timestamps_are_assumed_utc() -> None:
 
     assert snapshot.episodis[0].avisos[0].data_inici == datetime(
         2026, 8, 4, 12, 0, tzinfo=UTC
+    )
+
+
+# ---------------------------------------------------------------------------
+# Trap #12 — a "temps violent" vigilance avis carries `afectacions` directly,
+# with no `evolucions`/`periodes` wrapper (docs/01-data-sources.md §6)
+# ---------------------------------------------------------------------------
+
+
+def test_trap_12_violent_weather_afectacions_hang_directly_off_the_avis() -> None:
+    """A grade-6 vigilance avis reads as grade 6, not 0, with no `evolucions`.
+
+    This is the shape measured live 2026-08-06
+    (`docs/captures/smp-page-choice-2026-08-06.md`): the avis has no
+    `evolucions` key at all, so walking `evolucions` alone finds nothing and
+    the most urgent warning the integration exists to surface would silently
+    read as no danger.
+    """
+    raw_avis = {
+        "tipus": "Avís Vigilància per Temps Violent",
+        "comentari": "",
+        "representatiu": "1",
+        "llindar1": "Pedra de diàmetre > 2 cm, ratxes de vent > 90 km/h (25 m/s)",
+        "perill": 6.0,
+        "dataInici": "2026-08-06T12:43Z",
+        "dataFi": "2026-08-06T14:43Z",
+        "dataEmisio": "2026-08-06T12:43Z",
+        "estat": "Vigent",
+        "afectacions": [
+            {
+                "llindar": "Pedra > 2 cm, ratxes > 90 km/h (25 m/s)",
+                "auxiliar": False,
+                "perill": 6.0,
+                "idComarca": 15.0,
+                "nivell": 2.0,
+            }
+        ],
+    }
+    snapshot = parse_snapshot([_episodi(avisos=[raw_avis])])
+
+    avis = snapshot.episodis[0].avisos[0]
+    assert avis.evolucions == ()
+    assert avis.afectacions == (
+        Afectacio(
+            id_comarca=15,
+            perill=6,
+            nivell=2,
+            llindar="Pedra > 2 cm, ratxes > 90 km/h (25 m/s)",
+            auxiliar=False,
+            dia=None,
+        ),
+    )
+    assert avis.perill_maxim == 6
+
+
+def test_trap_12_avis_afectacions_combine_with_evolucions_afectacions() -> None:
+    """Both sources of affectation count towards the emission's worst grade."""
+    avis = Avis(
+        tipus=TipusAvis.TEMPS_VIOLENT,
+        tipus_nom="Avís Vigilància per Temps Violent",
+        estat="Vigent",
+        data_emissio=None,
+        data_inici=None,
+        data_fi=None,
+        evolucions=(
+            Evolucio(
+                dia=None,
+                comentari="",
+                llindar_baix=None,
+                llindar_alt=None,
+                distribucio_geografica=None,
+                representatiu=None,
+                periodes={
+                    "12-18": (
+                        Afectacio(
+                            id_comarca=1,
+                            perill=2,
+                            nivell=1,
+                            llindar="",
+                            auxiliar=False,
+                            dia=None,
+                        ),
+                    )
+                },
+            ),
+        ),
+        afectacions=(
+            Afectacio(
+                id_comarca=15,
+                perill=6,
+                nivell=2,
+                llindar="",
+                auxiliar=False,
+                dia=None,
+            ),
+        ),
+    )
+
+    assert avis.perill_maxim == 6
+
+
+# ---------------------------------------------------------------------------
+# `compute_payload_hash()` — order-insensitive for the unstable `afectacions`
+# list (docs/04-architecture.md §3, docs/01-data-sources.md §6 trap #12)
+# ---------------------------------------------------------------------------
+
+
+def test_payload_hash_is_stable_across_shuffled_affectation_order() -> None:
+    """Identical content in a different `afectacions` order hashes the same.
+
+    The feed returns `afectacions` rotated between requests even when nothing
+    changed; a hash sensitive to that order would flip every cycle and defeat
+    `always_update=False`.
+    """
+    affectations = [
+        {"idComarca": 1.0, "perill": 2.0, "nivell": 1.0, "auxiliar": False},
+        {"idComarca": 2.0, "perill": 3.0, "nivell": 1.0, "auxiliar": False},
+        {"idComarca": 3.0, "perill": 1.0, "nivell": 2.0, "auxiliar": True},
+    ]
+    band = {"nom": "12-18", "afectacions": affectations}
+    rotated_band = {"nom": "12-18", "afectacions": affectations[1:] + affectations[:1]}
+
+    original = [_with_periodes(band)]
+    reordered = [_with_periodes(rotated_band)]
+
+    assert compute_payload_hash(original) == compute_payload_hash(reordered)
+
+
+def test_payload_hash_changes_when_the_content_actually_changes() -> None:
+    """The canonicalisation does not hide a real change in grade."""
+    band = {"nom": "12-18", "afectacions": [_afectacio(perill=2.0)]}
+    changed_band = {"nom": "12-18", "afectacions": [_afectacio(perill=4.0)]}
+
+    assert compute_payload_hash([_with_periodes(band)]) != compute_payload_hash(
+        [_with_periodes(changed_band)]
     )
 
 

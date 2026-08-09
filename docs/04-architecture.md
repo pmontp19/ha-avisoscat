@@ -97,9 +97,13 @@ reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` qu
 payload: la llista `afectacions` torna **rotada** entre peticions encara que les dades
 siguin idèntiques, de manera que un hash del payload cru canviaria a cada cicle i no
 estalviaria res (ni ell ni l'`always_update=False` del §7)
-(`docs/captures/smp-page-choice-2026-08-06.md`). Aquesta canonicalització **encara no està
-implementada**: la tanca la mateixa tasca futura que ha de llegir `afectacions` al model
-(trap 12 de [`01-data-sources.md`](01-data-sources.md) §6).
+(`docs/captures/smp-page-choice-2026-08-06.md`). `models.compute_payload_hash()` fa
+aquesta canonicalització: ordena recursivament cada llista pel seu propi JSON canònic
+abans d'`hashlib.sha256`, de manera que el mateix contingut sempre produeix el mateix
+hash independentment de l'ordre que el feed li hagi donat
+(`tests/test_models.py::test_payload_hash_is_stable_across_shuffled_affectation_order`).
+`smp.py` (Task 5, encara no construït) és qui l'ha de cridar sobre el payload cru abans
+de passar `payload_hash` a `parse_snapshot()`.
 
 ### `PublicPageSource`
 
