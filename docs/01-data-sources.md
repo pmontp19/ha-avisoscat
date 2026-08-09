@@ -310,9 +310,10 @@ vàlid tal qual (`json.loads`).
 
 ⚠️ Hi ha tres claus `avisos` que no són la que busquem: la de l'objecte `opcions` (buida), la
 que porta **cada episodi** del payload (les emissions successives d'aquell episodi) i, a
-l'arrel, la de la segona còpia de la crida. `parser.py` llegeix les claus **només al nivell
-superior de la crida** i, entre còpies de la crida, es queda amb la **més rica** — no amb la
-primera no buida (§3.1).
+l'arrel, la de la **primera** còpia de la crida (el visor de `dies:1`, amb només els episodis
+d'avui: un subconjunt estricte de la segona còpia, el giny de `dies:3`, que és la que
+l'extracció es queda). `parser.py` llegeix les claus **només al nivell superior de la crida**
+i, entre còpies de la crida, es queda amb la **més rica** — no amb la primera no buida (§3.1).
 
 ---
 
