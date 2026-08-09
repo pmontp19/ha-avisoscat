@@ -273,7 +273,7 @@ canvia de dia al client (`actualitzaData()`).
 
 | Propietat | Valor |
 | --- | --- |
-| `cache-control` | `max-age=600` → **sondejar més sovint de 10 min no aporta res** |
+| `cache-control` | `max-age=600` en aquest mostreig, però la pàgina primària (radar) envia `max-age=180` (mesurat 2026-08-06, vegeu més avall). El terra de 10 min és **decisió nostra**, no una conseqüència de la capçalera |
 | `ETag` / `Last-Modified` | **Absents** → no hi ha GET condicional possible |
 | `vary` | `Accept-Encoding` (cal demanar gzip) |
 
@@ -456,6 +456,25 @@ Els preavisos tenen una **forma diferent** (sense comarca ni franges):
   "llindar": "Calor intensa", "perill": 2, "comentari": "" }
 ```
 
+I l'avís de **temps violent** en fa servir una **tercera** (trap 12): `afectacions` penja
+directament de l'objecte de l'avís, sense `evolucions` ni `periodes`, coherent amb el fet
+que la seva vigència són 2 h des de `dataEmisio` i no una franja de 6 h. Mesurada en viu el
+2026-08-06 ([`captures/smp-page-choice-2026-08-06.md`](captures/smp-page-choice-2026-08-06.md)):
+
+```jsonc
+{ "tipus": "Avís Vigilància per Temps Violent",
+  "comentari": "", "representatiu": "1",
+  "llindar1": "Pedra de diàmetre > 2 cm, ratxes de vent > 90 km/h (25 m/s), …",
+  "perill": 6.0,
+  "dataInici": "2026-08-06T12:43Z", "dataFi": "2026-08-06T14:43Z",
+  "dataEmisio": "2026-08-06T12:43Z", "estat": "Vigent",
+  "afectacions": [ { "llindar": "…", "auxiliar": false,
+                     "perill": 6.0, "idComarca": 15.0, "nivell": 2.0 } ] }
+```
+
+Noteu que aquí `representatiu` arriba com a **cadena** (`"1"`), no com a float; el trap 2 ja
+ho cobreix, perquè la conversió passa per `float()`.
+
 | # | Trap | Regla |
 | :---: | --- | --- |
 | 1 | `estat` observat en viu com a **`"Ampliat"`**, però el JS oficial només compara amb `"Vigent"` | **Mai filtrar per literal.** Tractar com a actiu tot el que no estigui explícitament tancat i decidir la vigència amb `dataInici`/`dataFi` + la finestra de la franja |
@@ -469,6 +488,7 @@ Els preavisos tenen una **forma diferent** (sense comarca ni franges):
 | 9 | El literal del tipus té variants històriques (`"Avís d'Observació"`, `"Avís temps violent"`) | Normalitzar amb prefixos/`casefold`, mai igualtat estricta |
 | 10 | `comentari`, `llindar*`, `meteor.nom`, `descripcio` (CECAT) són **text extern no fiable** | Mai `allow_html`, mai interpolació HTML directa (regla de `CLAUDE.md`) |
 | 11 | `fasedatahora` del CECAT és `DD/MM/YYYY HH:MM` local, no ISO | Parseig explícit tolerant; `None` si falla |
+| 12 | L'avís de **temps violent** porta `afectacions` **penjant directament de l'avís** (`avis["afectacions"]`), sense `evolucions` ni `periodes` | Llegir `avis["afectacions"]` a més de `avis["evolucions"]`, tractant-lo com una franja única de 2 h des de `dataEmisio`. Avui `Avis` no té camp `afectacions` i `_parse_avis()` només llegeix `evolucions`, de manera que un `Avís Vigilància per Temps Violent` de **grau 6 vigent** arriba amb `evolucions=()` i **`perill_maxim == 0`**: l'avís més greu que la integració existeix per ensenyar es llegeix com a cap perill |
 
 Aquesta és la mateixa disciplina que
 [`ha-incendiscat`](https://github.com/pmontp19/ha-incendiscat/blob/main/docs/04-architecture.md)
@@ -481,7 +501,7 @@ directa**.
 
 | Font | Oficial? | Clau? | Freqüència útil | Risc | Ús |
 | --- | :---: | :---: | --- | --- | --- |
-| `meteo.cat` (payload inline) | Dades oficials, **accés no documentat** | No | 10 min (`max-age=600`) | Mitjà — el marcatge pot canviar sense avís | ⭐ Font principal |
+| `meteo.cat` (payload inline) | Dades oficials, **accés no documentat** | No | 10 min (terra propi; el radar envia `max-age=180`) | Mitjà — el marcatge pot canviar sense avís | ⭐ Font principal |
 | `api.meteo.cat/pronostic/v2/smp` | Sí | **Sí** | ~3 peticions/dia (quota ciutadana) | Baix | Opcional, quan l'usuari té clau |
 | `static-m.meteo.cat/.../comarquesAmbMar.json` | Actiu estàtic oficial | No | Un cop (i cache) | Baix | Resolució comarca ⭐ |
 | `analisi.transparenciacatalunya.cat/resource/wj9c-j6vf` | **Sí, dades obertes** | No | Contínua | Baix | `ha-cecat` (fora d'abast v1) |
@@ -496,7 +516,7 @@ de l'últim estat bo, event de degradació i *repair issue* després de fallades
 ```
 # Avisos SMP sense clau (font principal)
 https://www.meteo.cat/observacions/radar          # payload inline `Meteocat.avisosSMP(...)`
-https://www.meteo.cat/                            # fallback, payload complet garantit
+https://www.meteo.cat/                            # fallback: mateix payload byte a byte, hi és per disponibilitat
 
 # Avisos SMP amb clau (opcional, capçalera x-api-key)
 https://api.meteo.cat/pronostic/v2/smp/episodis-oberts?data={YYYY}-{MM}-{DD}Z

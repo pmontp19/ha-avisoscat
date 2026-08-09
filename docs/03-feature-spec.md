@@ -90,7 +90,7 @@ pares). A diferència d'`ha-incendiscat`, **no** es declara `single_config_entry
 | `meteors` | multi-select | tots | Quins meteors seguir (crea/omet els sensors per meteor) |
 | `severe_threshold` | 1–6 | `3` | Grau a partir del qual `binary_sensor.severe_warning` s'encén (3 = "Alt") |
 | `include_sea` | bool | `false` | Afegeix la zona marítima adjacent (només si la comarca en té) |
-| `scan_interval` | 10–120 min | **adaptatiu** | Vegeu §6. Mínim 10 min: la font té `cache-control: max-age=600` |
+| `scan_interval` | 10–120 min | **adaptatiu** | Vegeu §6. Mínim 10 min: terra nostre, més conservador que el `max-age=180` de la font |
 
 Quan hi ha API key, el `scan_interval` efectiu es limita per la quota (vegeu §6).
 
@@ -431,7 +431,7 @@ durant els ~300 dies l'any en què no passa res.
 | Situació | Interval |
 | --- | --- |
 | Cap episodi obert | **30 min** |
-| Algun episodi obert | **10 min** (el mínim que permet `max-age=600`) |
+| Algun episodi obert | **10 min** (terra nostre, més conservador que el `max-age=180` de la font) |
 
 El 10 min només es justifica pel nowcast de temps violent, i el temps violent només
 apareix durant situacions convectives, que porten sempre algun episodi obert. Quan el cel

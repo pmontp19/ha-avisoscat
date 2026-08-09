@@ -468,7 +468,7 @@ referència.
 
 | Fallada | Comportament |
 | --- | --- |
-| Timeout / xarxa | 3 retries amb backoff 1s/2s/4s → `service_connected = false`, es conserva l'estat cachejat |
+| Timeout / xarxa | 3 retries amb backoff 1s/2s/4s; si s'esgoten, es prova el *fallback* `https://www.meteo.cat/` (§3, pas 1) i, si aquest també falla, `service_connected = false` i es conserva l'estat cachejat |
 | Pàgina pública canvia de marcatge (`SmpParseError`) | Es prova el *fallback* `https://www.meteo.cat/`; si també falla, es conserva l'estat i s'incrementa el comptador |
 | HTTP 403 amb API key | `ConfigEntryAuthFailed` → flux de reauth |
 | HTTP 429 | `UpdateFailed` + interval duplicat temporalment. **Cap retry** (cremaria quota) |
@@ -482,8 +482,10 @@ referència.
 - **Adaptatiu** amb la font pública: 30 min sense cap episodi obert, 10 min quan n'hi ha
   algun (§6 de `03-feature-spec.md`). El 10 min només es justifica pel nowcast de temps
   violent, que només apareix en situacions convectives.
-- Mínim absolut **10 minuts**: `cache-control: max-age=600`. Sondejar més sovint és
-  consumir amplada de banda d'un servei públic per a res.
+- Mínim absolut **10 minuts**: és un terra **nostre**, no de la font. La pàgina primària
+  envia `cache-control: max-age=180` (mesurat 2026-08-06), de manera que 10 minuts és
+  deliberadament més conservador del que la font demana: sondejar més sovint seria consumir
+  amplada de banda d'un servei públic sense necessitat.
 - Amb API key, l'interval el marca la quota, mai l'usuari sol.
 - El recàlcul de vigència per canvi de franja és **local**: no genera cap petició. És el
   que permet que el sondeig sigui lent sense que els events arribin tard.
