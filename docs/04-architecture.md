@@ -97,7 +97,9 @@ reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` qu
 payload: la llista `afectacions` torna **rotada** entre peticions encara que les dades
 siguin idèntiques, de manera que un hash del payload cru canviaria a cada cicle i no
 estalviaria res (ni ell ni l'`always_update=False` del §7)
-(`docs/captures/smp-page-choice-2026-08-06.md`).
+(`docs/captures/smp-page-choice-2026-08-06.md`). Aquesta canonicalització **encara no està
+implementada**: la tanca la mateixa tasca futura que ha de llegir `afectacions` al model
+(trap 12 de [`01-data-sources.md`](01-data-sources.md) §6).
 
 ### `PublicPageSource`
 
