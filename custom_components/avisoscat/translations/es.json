@@ -10,10 +10,64 @@
         "data_description": {
           "location": "Los avisos se publican por comarca; el marcador solo sirve para elegir cuál se sigue."
         }
+      },
+      "comarca": {
+        "title": "Avisos Meteocat",
+        "description": "La ubicación no se ha podido resolver en una comarca. Elige la comarca que quieres seguir.",
+        "data": {
+          "id_comarca": "Comarca"
+        },
+        "data_description": {
+          "id_comarca": "Una entrada por comarca. Más adelante puedes añadir otras para otros lugares."
+        }
+      },
+      "options": {
+        "title": "Avisos Meteocat",
+        "description": "Elige qué fenómenos seguir y a partir de qué grado un aviso se considera grave.",
+        "data": {
+          "api_key": "Clave API (opcional)",
+          "meteors": "Fenómenos",
+          "severe_threshold": "Umbral de aviso grave",
+          "include_sea": "Incluye la zona marítima",
+          "scan_interval": "Intervalo de consulta"
+        },
+        "data_description": {
+          "api_key": "Déjalo en blanco para usar la fuente pública sin clave. Si se indica, la clave se valida contra la API de Meteocat.",
+          "meteors": "Se crea un sensor por cada fenómeno seleccionado.",
+          "severe_threshold": "Grado de peligro (1-6) a partir del cual se enciende el aviso grave. El 3 es la banda oficial «Alto».",
+          "include_sea": "Sigue también la zona marítima frente a esta comarca.",
+          "scan_interval": "Minutos entre consultas. Déjalo en blanco para el sondeo adaptativo."
+        }
       }
+    },
+    "error": {
+      "location_outside_catalonia": "La ubicación está fuera de Cataluña. Elige una comarca de la lista.",
+      "cannot_connect": "No se ha podido conectar con Meteocat. Comprueba la conexión e inténtalo de nuevo.",
+      "invalid_geometry": "No se ha podido leer el mapa de comarcas. Elige una comarca de la lista.",
+      "invalid_auth": "La clave API ha sido rechazada. Compruébala e inténtalo de nuevo."
     },
     "abort": {
       "already_configured": "Esta comarca ya está configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Avisos Meteocat",
+        "description": "Elige qué fenómenos seguir y a partir de qué grado un aviso se considera grave. La clave API se gestiona por separado.",
+        "data": {
+          "meteors": "Fenómenos",
+          "severe_threshold": "Umbral de aviso grave",
+          "include_sea": "Incluye la zona marítima",
+          "scan_interval": "Intervalo de consulta"
+        },
+        "data_description": {
+          "meteors": "Se crea un sensor por cada fenómeno seleccionado.",
+          "severe_threshold": "Grado de peligro (1-6) a partir del cual se enciende el aviso grave. El 3 es la banda oficial «Alto».",
+          "include_sea": "Sigue también la zona marítima frente a esta comarca.",
+          "scan_interval": "Minutos entre consultas. Déjalo en blanco para el sondeo adaptativo."
+        }
+      }
     }
   }
 }

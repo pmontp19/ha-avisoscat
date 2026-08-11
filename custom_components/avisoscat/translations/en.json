@@ -10,10 +10,64 @@
         "data_description": {
           "location": "Warnings are published per comarca; the marker only picks which one to follow."
         }
+      },
+      "comarca": {
+        "title": "Avisos Meteocat",
+        "description": "The location could not be turned into a comarca. Pick the comarca you want to follow.",
+        "data": {
+          "id_comarca": "Comarca"
+        },
+        "data_description": {
+          "id_comarca": "One entry per comarca. You can add more later for other places."
+        }
+      },
+      "options": {
+        "title": "Avisos Meteocat",
+        "description": "Tune which phenomena to follow and when to flag a warning as severe.",
+        "data": {
+          "api_key": "API key (optional)",
+          "meteors": "Phenomena",
+          "severe_threshold": "Severe warning threshold",
+          "include_sea": "Include the maritime zone",
+          "scan_interval": "Update interval"
+        },
+        "data_description": {
+          "api_key": "Leave blank to use the keyless public source. When set, the key is validated against the Meteocat API.",
+          "meteors": "One sensor is created per selected phenomenon.",
+          "severe_threshold": "Danger grade (1-6) at which the severe warning switches on. 3 is the official \"Alt\" band.",
+          "include_sea": "Also follow the maritime zone in front of this comarca.",
+          "scan_interval": "Minutes between updates. Leave blank for adaptive polling."
+        }
       }
+    },
+    "error": {
+      "location_outside_catalonia": "The location is outside Catalonia. Pick a comarca from the list.",
+      "cannot_connect": "Could not connect to Meteocat. Check your connection and try again.",
+      "invalid_geometry": "The comarca map could not be read. Pick a comarca from the list.",
+      "invalid_auth": "The API key was rejected. Check it and try again."
     },
     "abort": {
       "already_configured": "This comarca is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Avisos Meteocat",
+        "description": "Tune which phenomena to follow and when to flag a warning as severe. The API key is managed separately.",
+        "data": {
+          "meteors": "Phenomena",
+          "severe_threshold": "Severe warning threshold",
+          "include_sea": "Include the maritime zone",
+          "scan_interval": "Update interval"
+        },
+        "data_description": {
+          "meteors": "One sensor is created per selected phenomenon.",
+          "severe_threshold": "Danger grade (1-6) at which the severe warning switches on. 3 is the official \"Alt\" band.",
+          "include_sea": "Also follow the maritime zone in front of this comarca.",
+          "scan_interval": "Minutes between updates. Leave blank for adaptive polling."
+        }
+      }
     }
   }
 }
