@@ -574,16 +574,21 @@ TEMPS_VIOLENT = "Avís Vigilància per Temps Violent"
 def _temps_violent(
     *,
     data_emissio: str | None = "2026-08-05T11:30Z",
+    data_fi: str | None = "2026-08-05T23:59Z",
     periodes: dict[str, list[dict] | None] | None = None,
 ) -> tuple[Episodi, ...]:
-    """A nowcast issued at 11:30 UTC, listed under the band that contains it."""
+    """A nowcast issued at 11:30 UTC, listed under the band that contains it.
+
+    `data_fi` defaults to the end of the day, well past the two-hour window, so a
+    test only sees the clipping when it asks for it.
+    """
     return _episodis(
         [_evolucio(periodes if periodes is not None else {"06-12": [_afectacio()]})],
         meteor="Temps violent",
         tipus=TEMPS_VIOLENT,
         data_emissio=data_emissio,
         data_inici=data_emissio,
-        data_fi="2026-08-05T23:59Z",
+        data_fi=data_fi,
     )
 
 
@@ -666,7 +671,9 @@ def test_violent_weather_crossing_midnight_is_in_force_today(clock: FakeClock) -
     enumeration the events carry (docs/03-feature-spec.md §4.1). Being never
     announced is unaffected by the crossing.
     """
-    episodis = _temps_violent(data_emissio="2026-08-05T23:30Z")
+    episodis = _temps_violent(
+        data_emissio="2026-08-05T23:30Z", data_fi="2026-08-06T01:30Z"
+    )
     clock.now = datetime(2026, 8, 6, 0, 30, tzinfo=UTC)
 
     vigents = afectacions_vigents(episodis, OSONA, clock())
@@ -683,6 +690,43 @@ def test_violent_weather_crossing_midnight_is_in_force_today(clock: FakeClock) -
     clock.now = datetime(2026, 8, 6, 1, 30, tzinfo=UTC)
     passades = projeccions(episodis, OSONA, clock())
     assert [(af.horitzo, af.dia) for af in passades] == [(Horitzo.PASSAT, AVUI)]
+
+
+def test_violent_weather_window_is_clipped_by_its_own_data_fi(
+    clock: FakeClock,
+) -> None:
+    """A `dataFi` inside the two-hour window ends the nowcast there.
+
+    The same clipping every other type gets: a projection reported in force after
+    the end the source itself declared would contradict the `data_fi` it carries.
+    """
+    episodis = _temps_violent(data_fi="2026-08-05T12:30Z")  # issued 11:30
+
+    vigents = afectacions_vigents(episodis, OSONA, clock())  # 12:00, still open
+    assert len(vigents) == 1
+    assert vigents[0].fi == datetime(2026, 8, 5, 12, 30, tzinfo=UTC)
+    assert vigents[0].fi < vigents[0].inici + FINESTRA_TEMPS_VIOLENT
+
+    clock.advance(minutes=30)  # 12:30, the declared end
+    assert afectacions_vigents(episodis, OSONA, clock()) == []
+    # And the two hours are over too, so nothing comes back later either.
+    clock.advance(minutes=30)
+    assert afectacions_vigents(episodis, OSONA, clock()) == []
+
+
+def test_violent_weather_ending_at_its_issue_time_reports_nothing(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A `dataFi` at or before the emission leaves no window at all.
+
+    Nothing rather than a zero-length in-force window, which would read as a live
+    warning for one recompute and as a wrong `fi` to any consumer.
+    """
+    episodis = _temps_violent(data_fi="2026-08-05T11:30Z")  # issued 11:30
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
+        assert projeccions(episodis, OSONA, clock()) == []
+    assert "at or before its issue time" in caplog.text
+    assert [rec.levelno for rec in caplog.records] == [logging.DEBUG]
 
 
 def test_violent_weather_without_an_issue_time_is_ignored(
@@ -843,13 +887,37 @@ def test_the_band_alias_of_the_written_documentation_resolves(clock: FakeClock) 
     assert outlook(episodis, OSONA, clock())[0].graella["18-00"] == 3
 
 
-def test_an_unknown_but_parseable_band_keeps_its_own_name(clock: FakeClock) -> None:
+@pytest.mark.parametrize(
+    ("nom", "hora"),
+    [
+        ("09-12", 10),
+        # A band the SMC invents ending at midnight, written the way the JSON
+        # writes `18-00`: the zero end hour still means the end of the day.
+        ("20-00", 22),
+    ],
+)
+def test_an_unknown_but_parseable_band_keeps_its_own_name(
+    clock: FakeClock, nom: str, hora: int
+) -> None:
     """A band the SMC invents later still places its affectations."""
-    episodis = _episodis([_evolucio({"09-12": [_afectacio()]})])
-    clock.now = datetime(2026, 8, 5, 10, 0, tzinfo=UTC)
-    assert [af.periode for af in afectacions_vigents(episodis, OSONA, clock())] == [
-        "09-12"
-    ]
+    episodis = _episodis([_evolucio({nom: [_afectacio()]})])
+    clock.now = datetime(2026, 8, 5, hora, 0, tzinfo=UTC)
+    assert [af.periode for af in afectacions_vigents(episodis, OSONA, clock())] == [nom]
+
+
+@pytest.mark.parametrize("nom", ["0-0", "00-00", "12-12"])
+def test_a_band_that_spans_nothing_is_not_read_as_a_whole_day(
+    clock: FakeClock, nom: str
+) -> None:
+    """A band whose two hours are the same places nothing, so it is dropped.
+
+    The "hour 0 means the end of the day" reading exists for `18-00`; applying it
+    to `0-0` would invent a 24-hour affectation, and because the outlook places
+    cells by overlap it would light up all four bands of the day at that grade.
+    """
+    episodis = _episodis([_evolucio({nom: [_afectacio(perill=5.0)]})])
+    assert projeccions(episodis, OSONA, clock()) == []
+    assert outlook(episodis, OSONA, clock())[0].graella == dict.fromkeys(PERIODES, 0)
 
 
 def test_an_unusable_band_name_is_ignored_and_logged_at_debug(
@@ -891,6 +959,133 @@ def test_a_missing_day_falls_back_instead_of_dropping_the_affectation(
     )
     clock.advance(hours=1)
     assert len(afectacions_vigents(episodis, OSONA, clock())) == 1
+
+
+def _dies_illegibles(
+    *,
+    dies: int = 3,
+    data_inici: str = "2026-08-05T00:00Z",
+    data_fi: str | None = "2026-08-07T23:59Z",
+) -> tuple[Episodi, ...]:
+    """A warning whose every `dia` reads `05/08/2026`, i.e. none of them parses.
+
+    The plausible upstream break: the source switches to the local date format
+    the CECAT already uses, `models.py` rejects every `dia` at once, and the only
+    dates left are the warning's own. Each forecast day carries the same `12-18`
+    affectation, so a collapse onto one day is visible as a repeat.
+    """
+    illegible = "05/08/2026"
+    return _episodis(
+        [
+            _evolucio({"12-18": [_afectacio(dia=illegible)]}, dia=illegible)
+            for _ in range(dies)
+        ],
+        data_inici=data_inici,
+        data_fi=data_fi,
+    )
+
+
+def test_unparseable_days_are_placed_one_per_forecast_day(clock: FakeClock) -> None:
+    """Three undatable forecast days are three days, not three copies of one.
+
+    The evolutions arrive in chronological daily order from `dataInici`'s date
+    (docs/01-data-sources.md §6 trap #12), so the nth one is placed n days on.
+    Collapsing them all onto the start date would make a count sensor read 3 for
+    a single band of a single comarca.
+    """
+    episodis = _dies_illegibles()
+    clock.advance(hours=1)  # 13:00, inside the `12-18` band of the first day
+
+    projectades = projeccions(episodis, OSONA, clock())
+    assert [(af.dia, af.periode) for af in projectades] == [
+        (AVUI, "12-18"),
+        (DEMA, "12-18"),
+        (DEMA_PASSAT, "12-18"),
+    ]
+    vigents = afectacions_vigents(episodis, OSONA, clock())
+    assert len(vigents) == 1
+    assert vigents[0].dia == AVUI
+    anunciades = afectacions_anunciades(episodis, OSONA, clock())
+    assert [af.etiqueta_dia for af in anunciades] == ["dema", "dema_passat"]
+
+
+@pytest.mark.parametrize(
+    ("dies", "data_fi"),
+    [
+        (3, "2026-08-05T23:59Z"),  # the derived days run past the declared end
+        (4, None),  # and past the three-day SMP horizon
+    ],
+)
+def test_the_derived_days_fall_back_when_the_inference_breaks(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture, dies: int, data_fi: str | None
+) -> None:
+    """One day per evolution is an inference, checked against the warning itself.
+
+    When the derived days would run past the warning's own `dataFi` or past the
+    documented three-day horizon, the feed no longer has the shape the capture
+    showed. That is said at warning level, naming the warning, and everything
+    falls back to the start date, where the dedupe leaves one projection.
+    """
+    episodis = _dies_illegibles(dies=dies, data_fi=data_fi)
+    clock.advance(hours=1)
+
+    with caplog.at_level(logging.WARNING, logger=vigencia.__name__):
+        projectades = projeccions(episodis, OSONA, clock())
+
+    assert [(af.dia, af.periode, af.horitzo) for af in projectades] == [
+        (AVUI, "12-18", Horitzo.VIGENT)
+    ]
+    assert "forecast days with no usable date" in caplog.text
+    assert "'Avís'" in caplog.text  # the message names the warning it is about
+    # `models.py` also warns once per unparseable field; this module says it once.
+    nostres = [rec for rec in caplog.records if rec.name == vigencia.__name__]
+    assert [rec.levelno for rec in nostres] == [logging.WARNING]
+
+
+def test_a_warning_with_dates_never_triggers_the_derived_day_guard(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The inference is only reached by an affectation that needs it.
+
+    Four dated forecast days would break the horizon check if it were applied
+    eagerly, so a payload whose dates all parse must stay silent.
+    """
+    episodis = _episodis(
+        [
+            _evolucio(
+                {"12-18": [_afectacio(dia=f"2026-08-0{5 + offset}T00:00Z")]},
+                dia=f"2026-08-0{5 + offset}T00:00Z",
+            )
+            for offset in range(4)
+        ],
+        data_fi="2026-08-08T23:59Z",
+    )
+    with caplog.at_level(logging.WARNING, logger=vigencia.__name__):
+        assert len(projeccions(episodis, OSONA, clock())) == 4
+    assert caplog.records == []
+
+
+def test_identical_affectations_are_reported_once(clock: FakeClock) -> None:
+    """The same band, comarca, grade and interval twice is one affectation.
+
+    The feed repeating an entry must not double a count sensor; anything that
+    differs in any field is still its own projection.
+    """
+    clock.advance(hours=1)
+    episodis = _episodis(
+        [
+            _evolucio(
+                {
+                    "12-18": [
+                        _afectacio(perill=3.0),
+                        _afectacio(perill=3.0),
+                        _afectacio(perill=4.0),
+                    ]
+                }
+            )
+        ]
+    )
+    assert [af.perill for af in afectacions_vigents(episodis, OSONA, clock())] == [4, 3]
 
 
 def test_an_undatable_affectation_is_ignored_and_logged_at_debug(

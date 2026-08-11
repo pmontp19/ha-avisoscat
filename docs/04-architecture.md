@@ -415,6 +415,19 @@ anunciats (quan existeixen ja són vigents; una emissió amb data futura no info
 franges on apareixen es col·lapsen en una sola projecció, la més greu, perquè un nowcast
 repetit a dues franges no compti com dos avisos vigents.
 
+La finestra de 2 h **sí que es retalla pel `dataFi` de l'avís**, el mateix `min()` que
+`_interval_efectiu` aplica a tots els altres tipus: una projecció amb un `fi` que sobrevisqui
+el `data_fi` que ella mateixa porta es contradiu, i dir que hi ha pedra vigent 90 minuts
+després que l'SMC l'hagi donat per acabada és el mateix error que un zero silenciós, en
+l'altre sentit. Si el retall no deixa res (`dataFi` igual o anterior a l'emissió) el nowcast
+no s'informa, en lloc d'informar una finestra vigent de durada zero.
+
+⚠️ **No verificat amb dades reals**: no hi ha cap payload de temps violent capturat a
+[`captures/`](captures/), així que què porta realment el `dataFi` d'un nowcast és una
+suposició (el `tests/fixtures/smp_temps_violent_sample.json` que llista §1 encara no
+existeix). Cal capturar el primer temps violent real que s'observi i tornar a comprovar
+aquest retall contra ell.
+
 ⚠️ **Excepció deliberada al dia relatiu, no la "corregeixis" tornant a l'aritmètica plana**:
 mentre la finestra de 2 h és oberta, el `dia` d'un nowcast és **el dia en què es llegeix**
 (`now.date()`), no el de l'emissió. Una emissió a les 23:30 llegida a les 00:30 encara és
@@ -425,7 +438,7 @@ dir mai res per a un avís que mai no és anunciat. Una finestra ja tancada cons
 què es va emetre. `outlook()` no canvia: reparteix per solapament d'interval i ja situa bé la
 finestra a les dues cel·les.
 
-Vuit decisions que no es llegeixen del sketch:
+Deu decisions que no es llegeixen del sketch:
 
 - **Un sol `AfectacioProjectada`** en lloc d'un `AfectacioVigent`: una afectació vigent i
   una anunciada porten exactament la mateixa càrrega i només difereixen del costat del
@@ -443,11 +456,30 @@ Vuit decisions que no es llegeixen del sketch:
   l'aritmètica de franges. Hi ha un test d'hivern i un d'estiu que ho demostren.
 - **Els noms de franja es parsegen, no es busquen**: el `"18-24"` de la documentació escrita
   de l'SMC resol igual que el `"18-00"` del JSON i tots dos es normalitzen a `"18-00"`. Un
-  nom que no es pugui situar en el temps es descarta, mai s'endevina. El descart es registra
+  nom que no es pugui situar en el temps es descarta, mai s'endevina: la coerció "l'hora 0
+  vol dir final del dia" només val si l'hora d'inici és més gran que 0, perquè un `"0-0"` no
+  situa res i llegir-lo com un dia sencer seria precisament endevinar. El descart es registra
   a **debug**, no a warning: aquest recorregut es repeteix cada minut i per cada entrada de
   configuració, així que un sol camp malformat repetiria la mateixa línia ~1440 vegades al
   dia. El report a nivell de payload és de `models.py`, un cop per fetch. Igual per a una
   afectació sense cap dia i per a un nowcast sense hora d'emissió.
+- **Un dia il·legible es deriva per posició, amb guarda**: si ni l'afectació ni la seva
+  evolució tenen un `dia` parsejable (p. ex. la font canvia de format de data i `models.py`
+  els rebutja tots alhora), el dia surt de `dataInici.date()` **més l'índex de l'evolució**
+  dins l'avís. És una inferència estructurada, no un fet de la font: el que la sosté és que
+  [`captures/smp-episodis-oberts-2026-08-05.json`](captures/smp-episodis-oberts-2026-08-05.json)
+  porta les evolucions en ordre cronològic diari començant exactament a la data del
+  `dataInici` (2026-08-04, 2026-08-05, 2026-08-06 amb `dataInici` 2026-08-04T12:00). Com que
+  l'evidència és una sola captura, la inferència es **comprova**: si els dies derivats
+  passarien del `dataFi` de l'avís o de l'horitzó de 3 dies de l'SMP, s'ha trencat la
+  suposició → **warning** (aquest sí, amb l'avís identificat: vol dir que la font ha canviat
+  de forma) i tots els dies cauen al `dataInici.date()` pla, que la desduplicació de sota
+  col·lapsa en una projecció per franja. Trap #12 de §6 de
+  [`01-data-sources.md`](01-data-sources.md).
+- **`projeccions()` desduplica projeccions idèntiques**: la mateixa franja de la mateixa
+  comarca, al mateix grau i al mateix interval, és una afectació encara que la font la digui
+  dues vegades; comptar-la dues vegades donaria un número fals a un sensor de recompte.
+  Qualsevol diferència en qualsevol camp, el grau inclòs, es conserva.
 - **No es filtra per grau**: un grau il·legible també val 0 (§4), així que descartar el 0
   aquí perdria afectacions reals. El llindar de severitat és cosa de les entitats.
 - **`outlook()` reparteix per solapament d'interval**, no per nom de franja: així una
