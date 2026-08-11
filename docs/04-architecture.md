@@ -415,18 +415,24 @@ anunciats (quan existeixen ja són vigents; una emissió amb data futura no info
 franges on apareixen es col·lapsen en una sola projecció, la més greu, perquè un nowcast
 repetit a dues franges no compti com dos avisos vigents.
 
-La finestra de 2 h **sí que es retalla pel `dataFi` de l'avís**, el mateix `min()` que
-`_interval_efectiu` aplica a tots els altres tipus: una projecció amb un `fi` que sobrevisqui
-el `data_fi` que ella mateixa porta es contradiu, i dir que hi ha pedra vigent 90 minuts
-després que l'SMC l'hagi donat per acabada és el mateix error que un zero silenciós, en
-l'altre sentit. Si el retall no deixa res (`dataFi` igual o anterior a l'emissió) el nowcast
-no s'informa, en lloc d'informar una finestra vigent de durada zero.
+La finestra de 2 h **es retalla pel `dataFi` de l'avís només quan aquest fi la limita de
+debò**, és a dir quan és posterior a l'emissió: és el mateix `min()` que `_interval_efectiu`
+aplica a tots els altres tipus, perquè una projecció amb un `fi` que sobrevisqui el `data_fi`
+que ella mateixa porta es contradiu, i dir que hi ha pedra vigent 90 minuts després que
+l'SMC l'hagi donat per acabada és el mateix error que un zero silenciós, en l'altre sentit.
+
+Un `dataFi` absent, o igual o anterior a l'emissió, **no és utilitzable com a límit**: es
+mantenen les 2 h senceres i la forma es reporta un cop (warning el primer cop per emissió,
+debug després). Un nowcast que desapareix és pitjor que un que s'allarga: allargar-se fa que
+algú miri el cel i no vegi res, desaparèixer fa que un avís de pedra de grau màxim es llegeixi
+com a cap perill, i les 2 h des de l'emissió són un criteri d'acceptació. En tots dos casos el
+`fi` de la projecció i el seu `data_fi` són coherents.
 
 ⚠️ **No verificat amb dades reals**: no hi ha cap payload de temps violent capturat a
 [`captures/`](captures/), així que què porta realment el `dataFi` d'un nowcast és una
 suposició (el `tests/fixtures/smp_temps_violent_sample.json` que llista §1 encara no
-existeix). Cal capturar el primer temps violent real que s'observi i tornar a comprovar
-aquest retall contra ell.
+existeix). Cal capturar a [`captures/`](captures/) el primer temps violent real que s'observi
+i tornar a comprovar-hi **les dues branques**.
 
 ⚠️ **Excepció deliberada al dia relatiu, no la "corregeixis" tornant a l'aritmètica plana**:
 mentre la finestra de 2 h és oberta, el `dia` d'un nowcast és **el dia en què es llegeix**
@@ -438,7 +444,7 @@ dir mai res per a un avís que mai no és anunciat. Una finestra ja tancada cons
 què es va emetre. `outlook()` no canvia: reparteix per solapament d'interval i ja situa bé la
 finestra a les dues cel·les.
 
-Deu decisions que no es llegeixen del sketch:
+Onze decisions que no es llegeixen del sketch:
 
 - **Un sol `AfectacioProjectada`** en lloc d'un `AfectacioVigent`: una afectació vigent i
   una anunciada porten exactament la mateixa càrrega i només difereixen del costat del
@@ -472,14 +478,30 @@ Deu decisions que no es llegeixen del sketch:
   `dataInici` (2026-08-04, 2026-08-05, 2026-08-06 amb `dataInici` 2026-08-04T12:00). Com que
   l'evidència és una sola captura, la inferència es **comprova**: si els dies derivats
   passarien del `dataFi` de l'avís o de l'horitzó de 3 dies de l'SMP, s'ha trencat la
-  suposició → **warning** (aquest sí, amb l'avís identificat: vol dir que la font ha canviat
-  de forma) i tots els dies cauen al `dataInici.date()` pla, que la desduplicació de sota
-  col·lapsa en una projecció per franja. Trap #12 de §6 de
+  suposició → es reporta (amb el **meteor** identificat, perquè el `tipus_nom` és el mateix
+  literal `Avís` per a tots i no diria quin s'ha trencat) i tots els dies cauen al
+  `dataInici.date()` pla, i llavors **`_pic_per_dia_i_franja` col·lapsa una sola projecció per
+  (dia, franja): la més greu**. Sense aquest col·lapse tres evolucions que només difereixen
+  en el `comentari` tornarien tres afectacions vigents per a una sola franja d'una sola
+  comarca, que és justament el recompte fals que la derivació evita. El desempat és
+  determinista (grau, després nivell, després un ordre canònic sobre la resta de camps) i
+  **mai per ordre d'arribada**: l'ordre de les afectacions dins el payload no és una propietat
+  que la font garanteixi entre peticions, i deixar-l'hi decidir faria ballar el grau informat
+  entre dos polls sense que la dada hagi canviat. Trap #12 de §6 de
   [`01-data-sources.md`](01-data-sources.md).
+- **Els reports de tolerància es diuen un cop per emissió**: warning el primer cop, debug
+  després, perquè aquest recorregut és el recàlcul de cada minut i 1440 línies idèntiques al
+  dia per entrada de configuració amaguen el senyal en lloc d'aixecar-lo. La memòria es
+  guarda per `(motiu, (meteor, tipus, dataEmisio))` i `projeccions()` la retalla a les
+  emissions del snapshot que acaba de recórrer, la mateixa disciplina que la purga
+  d'`announced_seen` de §8: així no pot créixer més que el snapshot. Una emissió que
+  desapareix i torna es reporta un altre cop, i això és el comportament correcte.
 - **`projeccions()` desduplica projeccions idèntiques**: la mateixa franja de la mateixa
   comarca, al mateix grau i al mateix interval, és una afectació encara que la font la digui
-  dues vegades; comptar-la dues vegades donaria un número fals a un sensor de recompte.
-  Qualsevol diferència en qualsevol camp, el grau inclòs, es conserva.
+  dues vegades; comptar-la dues vegades donaria un número fals a un sensor de recompte. És
+  només la xarxa de seguretat de tot arreu: qualsevol diferència en qualsevol camp, el grau
+  inclòs, es conserva, i el col·lapse més fort per (dia, franja) és exclusiu del fallback dels
+  dies derivats.
 - **No es filtra per grau**: un grau il·legible també val 0 (§4), així que descartar el 0
   aquí perdria afectacions reals. El llindar de severitat és cosa de les entitats.
 - **`outlook()` reparteix per solapament d'interval**, no per nom de franja: així una

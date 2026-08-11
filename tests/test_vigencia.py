@@ -15,6 +15,7 @@ source really sends, floats and `null`s included.
 
 import json
 import logging
+from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -90,6 +91,7 @@ def _evolucio(
     periodes: dict[str, list[dict] | None],
     *,
     dia: str | None = "2026-08-05T00:00Z",
+    comentari: str = "Ratxes molt fortes al litoral.",
     llindar1: str | None = "Ratxa màxima > 72 km/h (20 m/s)",
     llindar2: str | None = "Ratxa màxima > 108 km/h (30 m/s)",
 ) -> dict:
@@ -102,7 +104,7 @@ def _evolucio(
     noms = list(PERIODES) + [nom for nom in periodes if nom not in PERIODES]
     return {
         "dia": dia,
-        "comentari": "Ratxes molt fortes al litoral.",
+        "comentari": comentari,
         "representatiu": 1.0,
         "llindar1": llindar1,
         "llindar2": llindar2,
@@ -148,6 +150,24 @@ def _episodis(
 def _nomes_tarda(**kwargs) -> tuple[Episodi, ...]:
     """The reference subject: one warning affecting Osona only in band `12-18`."""
     return _episodis([_evolucio({"12-18": [_afectacio()]})], **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def warn_once_memo_reset() -> Iterator[None]:
+    """Clear the module's warn-once memo around every test.
+
+    `vigencia` warns the first time an emission trips a tolerance path and debugs
+    afterwards, so a test that inherited another's memo would assert the wrong
+    level: the state is reset both before and after, never carried across.
+    """
+    vigencia._incidencies_reportades.clear()
+    yield
+    vigencia._incidencies_reportades.clear()
+
+
+def _nostres(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    """Only this module's records: `models.py` warns per unparseable field too."""
+    return [rec for rec in caplog.records if rec.name == vigencia.__name__]
 
 
 def _horitzons(
@@ -714,19 +734,40 @@ def test_violent_weather_window_is_clipped_by_its_own_data_fi(
     assert afectacions_vigents(episodis, OSONA, clock()) == []
 
 
-def test_violent_weather_ending_at_its_issue_time_reports_nothing(
-    clock: FakeClock, caplog: pytest.LogCaptureFixture
+@pytest.mark.parametrize("data_fi", ["2026-08-05T11:30Z", "2026-08-05T11:29Z"])
+def test_violent_weather_ending_at_its_issue_time_keeps_its_two_hours(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture, data_fi: str
 ) -> None:
-    """A `dataFi` at or before the emission leaves no window at all.
+    """A `dataFi` at or before the emission is not usable as a window bound.
 
-    Nothing rather than a zero-length in-force window, which would read as a live
-    warning for one recompute and as a wrong `fi` to any consumer.
+    The nowcast keeps its full two hours and the shape is reported, because a
+    nowcast that vanishes is worse than one that lingers: a maximum-grade hail
+    warning reading as no danger is the failure this integration guards against,
+    and no real temps-violent payload has ever been captured to say which shape
+    the source actually sends.
     """
-    episodis = _temps_violent(data_fi="2026-08-05T11:30Z")  # issued 11:30
-    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
-        assert projeccions(episodis, OSONA, clock()) == []
+    episodis = _temps_violent(data_fi=data_fi)  # issued 11:30
+
+    with caplog.at_level(logging.WARNING, logger=vigencia.__name__):
+        vigents = afectacions_vigents(episodis, OSONA, clock())  # 12:00
+
+    assert len(vigents) == 1
+    assert vigents[0].fi == datetime(2026, 8, 5, 13, 30, tzinfo=UTC)
+    assert vigents[0].fi == vigents[0].inici + FINESTRA_TEMPS_VIOLENT
     assert "at or before its issue time" in caplog.text
-    assert [rec.levelno for rec in caplog.records] == [logging.DEBUG]
+    assert "'Temps violent'" in caplog.text
+    assert [rec.levelno for rec in _nostres(caplog)] == [logging.WARNING]
+
+    clock.advance(hours=2)  # 14:00, past the window
+    assert afectacions_vigents(episodis, OSONA, clock()) == []
+
+
+def test_violent_weather_without_an_end_keeps_its_two_hours(clock: FakeClock) -> None:
+    """No `dataFi` at all clips nothing, and says nothing either."""
+    episodis = _temps_violent(data_fi=None)
+    vigents = afectacions_vigents(episodis, OSONA, clock())
+    assert len(vigents) == 1
+    assert vigents[0].fi == vigents[0].inici + FINESTRA_TEMPS_VIOLENT
 
 
 def test_violent_weather_without_an_issue_time_is_ignored(
@@ -964,6 +1005,8 @@ def test_a_missing_day_falls_back_instead_of_dropping_the_affectation(
 def _dies_illegibles(
     *,
     dies: int = 3,
+    perills: list[float] | None = None,
+    comentaris: list[str] | None = None,
     data_inici: str = "2026-08-05T00:00Z",
     data_fi: str | None = "2026-08-07T23:59Z",
 ) -> tuple[Episodi, ...]:
@@ -971,14 +1014,22 @@ def _dies_illegibles(
 
     The plausible upstream break: the source switches to the local date format
     the CECAT already uses, `models.py` rejects every `dia` at once, and the only
-    dates left are the warning's own. Each forecast day carries the same `12-18`
-    affectation, so a collapse onto one day is visible as a repeat.
+    dates left are the warning's own. Each forecast day carries one `12-18`
+    affectation, with its own grade and comment when asked for, because a
+    multi-day warning normally differs from day to day and a collapse that only
+    dropped identical clones would not be a collapse at all.
     """
     illegible = "05/08/2026"
+    graus = perills if perills is not None else [3.0] * dies
+    textos = comentaris if comentaris is not None else ["Ratxes al litoral."] * dies
     return _episodis(
         [
-            _evolucio({"12-18": [_afectacio(dia=illegible)]}, dia=illegible)
-            for _ in range(dies)
+            _evolucio(
+                {"12-18": [_afectacio(dia=illegible, perill=grau)]},
+                dia=illegible,
+                comentari=text,
+            )
+            for grau, text in zip(graus, textos, strict=True)
         ],
         data_inici=data_inici,
         data_fi=data_fi,
@@ -1023,23 +1074,132 @@ def test_the_derived_days_fall_back_when_the_inference_breaks(
 
     When the derived days would run past the warning's own `dataFi` or past the
     documented three-day horizon, the feed no longer has the shape the capture
-    showed. That is said at warning level, naming the warning, and everything
-    falls back to the start date, where the dedupe leaves one projection.
+    showed. It is reported, everything falls back to the start date, and the
+    per-(day, band) collapse leaves one projection: the most severe. The days
+    differ in grade and comment here, which is the normal shape of a multi-day
+    warning and the case a byte-identical dedupe would not have collapsed.
     """
-    episodis = _dies_illegibles(dies=dies, data_fi=data_fi)
+    graus = [3.0, 5.0, 4.0, 2.0][:dies]
+    episodis = _dies_illegibles(
+        dies=dies,
+        perills=graus,
+        comentaris=[f"Dia {index}." for index in range(dies)],
+        data_fi=data_fi,
+    )
     clock.advance(hours=1)
 
     with caplog.at_level(logging.WARNING, logger=vigencia.__name__):
         projectades = projeccions(episodis, OSONA, clock())
 
-    assert [(af.dia, af.periode, af.horitzo) for af in projectades] == [
-        (AVUI, "12-18", Horitzo.VIGENT)
-    ]
     assert "forecast days with no usable date" in caplog.text
-    assert "'Avís'" in caplog.text  # the message names the warning it is about
-    # `models.py` also warns once per unparseable field; this module says it once.
-    nostres = [rec for rec in caplog.records if rec.name == vigencia.__name__]
-    assert [rec.levelno for rec in nostres] == [logging.WARNING]
+    assert "'Vent'" in caplog.text  # the meteor, not the useless `Avís` literal
+    assert [rec.levelno for rec in _nostres(caplog)] == [logging.WARNING]
+    assert [(af.dia, af.periode, af.horitzo, af.perill) for af in projectades] == [
+        (AVUI, "12-18", Horitzo.VIGENT, 5)
+    ]
+    assert len(afectacions_vigents(episodis, OSONA, clock())) == 1
+
+
+@pytest.mark.parametrize(
+    "ordre",
+    [(0, 1, 2), (2, 1, 0), (1, 2, 0)],
+)
+def test_the_fallback_collapse_does_not_depend_on_arrival_order(
+    clock: FakeClock, ordre: tuple[int, ...]
+) -> None:
+    """Equal grades are broken by the projection's own content, never by order.
+
+    The order of the affectations inside the payload is not a property the source
+    guarantees between requests, so a collapse that let it decide would make the
+    reported comment flip from poll to poll with the data unchanged.
+    """
+    comentaris = ["Aiguats al prelitoral.", "Calamarsa al pla.", "Ratxes al litoral."]
+    episodis = _dies_illegibles(
+        perills=[4.0, 4.0, 4.0],
+        comentaris=[comentaris[index] for index in ordre],
+        data_fi="2026-08-05T23:59Z",  # trips the guard, so everything collapses
+    )
+    clock.advance(hours=1)
+
+    projectades = projeccions(episodis, OSONA, clock())
+    assert [(af.perill, af.comentari) for af in projectades] == [(4, comentaris[0])]
+
+
+@pytest.mark.parametrize("dies", [1, 2])
+def test_the_fallback_collapse_handles_the_degenerate_counts(
+    clock: FakeClock, dies: int
+) -> None:
+    """One projection stays one, and a collapse of nothing is nothing.
+
+    `dataFi` a day before `dataInici` trips the guard for any number of forecast
+    days; with the band clipped away by that same `dataFi` there is nothing left
+    to collapse, which must be no projection rather than an error.
+    """
+    clock.advance(hours=1)
+    episodis = _dies_illegibles(dies=dies, data_fi="2026-08-04T23:59Z")
+    assert projeccions(episodis, OSONA, clock()) == []
+
+    # And the same guard with a usable end keeps exactly one projection.
+    episodis = _dies_illegibles(dies=dies, data_fi="2026-08-05T14:00Z")
+    projectades = projeccions(episodis, OSONA, clock())
+    assert [(af.dia, af.fi) for af in projectades] == [
+        (AVUI, datetime(2026, 8, 5, 14, 0, tzinfo=UTC))
+    ]
+
+
+def test_the_derived_day_guard_warns_once_and_then_debugs(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The guard says it once per emission, not once per recompute.
+
+    One recompute cycle is three walks (the two horizons and the grid), and the
+    recompute itself runs every minute per config entry, so a warning per walk
+    would be thousands of identical lines a day and would bury the signal.
+    """
+    episodis = _dies_illegibles(dies=4, data_fi=None)
+    clock.advance(hours=1)
+
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
+        projeccions(episodis, OSONA, clock())
+    assert [rec.levelno for rec in _nostres(caplog)] == [logging.WARNING]
+
+    caplog.clear()
+    with caplog.at_level(logging.DEBUG, logger=vigencia.__name__):
+        afectacions_vigents(episodis, OSONA, clock())
+        afectacions_anunciades(episodis, OSONA, clock())
+        outlook(episodis, OSONA, clock())
+    repeticions = _nostres(caplog)
+    assert repeticions  # the message is still there, just not at warning level
+    assert {rec.levelno for rec in repeticions} == {logging.DEBUG}
+
+
+def test_the_report_memo_is_bounded_by_the_walked_snapshot(
+    clock: FakeClock, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The memo holds only emissions of the snapshot just walked.
+
+    Same purge discipline as `announced_seen` (docs/04-architecture.md §8): an
+    emission that leaves the snapshot is forgotten, so the set cannot grow without
+    limit, and if it comes back it is worth saying again.
+    """
+    episodis = _dies_illegibles(dies=4, data_fi=None)
+    clock.advance(hours=1)
+    projeccions(episodis, OSONA, clock())
+
+    assert vigencia._incidencies_reportades == {
+        (
+            vigencia._MOTIU_DIES_DERIVATS,
+            ("Vent", "Avís", datetime(2026, 8, 4, 15, 30, tzinfo=UTC)),
+        )
+    }
+
+    projeccions((), OSONA, clock())  # the emission is gone from the snapshot
+    assert vigencia._incidencies_reportades == set()
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger=vigencia.__name__):
+        projeccions(episodis, OSONA, clock())  # and it comes back
+    assert [rec.levelno for rec in _nostres(caplog)] == [logging.WARNING]
 
 
 def test_a_warning_with_dates_never_triggers_the_derived_day_guard(

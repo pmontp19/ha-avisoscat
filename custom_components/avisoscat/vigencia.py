@@ -28,6 +28,10 @@ read as UTC, an aware one is converted), so a local-time offset can never leak
 into a band comparison. No Home Assistant import and no I/O: like `models.py`,
 this is pure Python over already-typed objects.
 
+The one piece of state is `_incidencies_reportades`, which only decides whether a
+tolerance path warns or repeats at debug. It never changes what is projected, and
+`projeccions` trims it to the emissions of the snapshot it walked.
+
 Three deliberate deviations from the sketch in docs/04-architecture.md §5:
 
 - One `AfectacioProjectada` instead of an `AfectacioVigent`, because an in-force
@@ -94,6 +98,50 @@ DIES_OUTLOOK: Final = 3
 # Payload literals for the relative day, fixed by docs/03-feature-spec.md §4.1.
 # They are data the events carry, not translated user-facing text.
 _ETIQUETES_DIA: Final[tuple[str, ...]] = ("avui", "dema", "dema_passat")
+
+# One emission, as docs/04-architecture.md §8 identifies it for `announced_seen`:
+# meteor, warning type and issue instant. The raw names are used rather than the
+# enums so an unrecognised literal still identifies itself (`models.py` trap #5).
+_IdentitatAvis = tuple[str, str, datetime | None]
+
+# Reasons an emission can be reported about, so two different tolerance paths
+# tripping on the same emission are two independent reports.
+_MOTIU_DIES_DERIVATS: Final = "dies-derivats"
+_MOTIU_FI_TEMPS_VIOLENT: Final = "fi-temps-violent"
+
+# Which (reason, emission) pairs have already been reported. Both paths that use
+# it run on the once-a-minute recompute of `__init__.py`, so the first occurrence
+# warns and every repeat goes to debug: 1440 identical lines a day per config
+# entry bury the signal instead of raising it, and the integration is multi-entry
+# by design. Bounded by the same discipline as the `announced_seen` purge of
+# docs/04-architecture.md §8: `projeccions` trims this to the emissions of the
+# snapshot it has just walked, so it can never outgrow the current snapshot. An
+# emission that goes away and comes back is reported again, which is intended.
+_incidencies_reportades: set[tuple[str, _IdentitatAvis]] = set()
+
+
+def _identitat_avis(episodi: Episodi, avis: Avis) -> _IdentitatAvis:
+    """Identity of one emission, the triple docs/04-architecture.md §8 keys on."""
+    return (episodi.meteor_nom, avis.tipus_nom, avis.data_emissio)
+
+
+def _reporta_un_cop(
+    motiu: str, identitat: _IdentitatAvis, missatge: str, *args: object
+) -> None:
+    """Warn the first time this emission trips `motiu`, debug from then on."""
+    clau = (motiu, identitat)
+    if clau in _incidencies_reportades:
+        _LOGGER.debug(missatge, *args)
+        return
+    _incidencies_reportades.add(clau)
+    _LOGGER.warning(missatge, *args)
+
+
+def _purga_incidencies(presents: set[_IdentitatAvis]) -> None:
+    """Forget the reports of emissions the walked snapshot no longer carries."""
+    _incidencies_reportades.difference_update(
+        {clau for clau in _incidencies_reportades if clau[1] not in presents}
+    )
 
 
 class Horitzo(StrEnum):
@@ -305,7 +353,14 @@ def _dia_afectacio(
     return dia_derivat
 
 
-def _dies_derivats(avis: Avis) -> tuple[date, ...]:
+class _DiesDerivats(NamedTuple):
+    """The day of each forecast day, and whether the inference was abandoned."""
+
+    dies: tuple[date, ...]
+    collapsats: bool  # every day fell back on the start date, so collapse them
+
+
+def _dies_derivats(episodi: Episodi, avis: Avis) -> _DiesDerivats:
     """One day per forecast day of a warning whose own `dia` fields are unusable.
 
     A **structured inference, not a fact about the feed**: the evolutions of an
@@ -319,26 +374,35 @@ def _dies_derivats(avis: Avis) -> tuple[date, ...]:
 
     The evidence is a single capture, so the inference is checked rather than
     trusted: `_dies_derivats_son_plausibles` says when it no longer holds, and
-    the fallback is the plain start date for every day, which `projeccions`
-    dedupes down to one projection per band (docs/01-data-sources.md §6 trap #12).
+    then every forecast day falls back on the plain start date and
+    `_pic_per_dia_i_franja` collapses them to one projection per (day, band),
+    the most severe one (docs/01-data-sources.md §6 trap #12).
+
+    The report names the meteor, because `tipus_nom` is the same `Avís` literal
+    for every ordinary SMP warning and would not say which one broke. It warns
+    once per emission and then repeats at debug, because this runs on the
+    once-a-minute recompute.
     """
     if avis.data_inici is None:
-        return ()
+        return _DiesDerivats((), False)
     base = _as_utc(avis.data_inici).date()
     dies = tuple(base + timedelta(days=index) for index in range(len(avis.evolucions)))
     if not dies or _dies_derivats_son_plausibles(avis, dies):
-        return dies
-    _LOGGER.warning(
-        "SMP warning %r (issued %s, ending %s) has %s forecast days with no usable "
-        "date and one-per-day placement would run past its own period: placing "
-        "them all on %s instead",
+        return _DiesDerivats(dies, False)
+    _reporta_un_cop(
+        _MOTIU_DIES_DERIVATS,
+        _identitat_avis(episodi, avis),
+        "SMP warning %r for %r (issued %s, ending %s) has %s forecast days with no "
+        "usable date and one-per-day placement would run past its own period: "
+        "collapsing them onto %s, keeping the most severe of each band",
         avis.tipus_nom,
+        episodi.meteor_nom,
         avis.data_emissio,
         avis.data_fi,
         len(dies),
         base,
     )
-    return (base,) * len(dies)
+    return _DiesDerivats((base,) * len(dies), True)
 
 
 def _dies_derivats_son_plausibles(avis: Avis, dies: tuple[date, ...]) -> bool:
@@ -462,20 +526,25 @@ def _projecta_bandes(
     Like `_periode_hores`, the tolerance paths here log at debug level because
     this walk repeats every minute for every configured comarca. The derived days
     are computed only when an affectation actually needs one, so a warning whose
-    dates all parse never pays for the inference nor triggers its warning.
+    dates all parse never pays for the inference nor triggers its report.
+
+    Only the projections placed on a derived day are collapsed when that
+    inference is abandoned: a warning that dates its own days keeps every
+    affectation it declares, including two grades of the same band.
     """
     projeccions_avis: list[AfectacioProjectada] = []
-    dies_derivats: tuple[date, ...] | None = None
+    derivades: list[AfectacioProjectada] = []
+    dies_derivats: _DiesDerivats | None = None
     for candidat in candidates:
         hores = _periode_hores(candidat.periode_nom)
         if hores is None:
             continue
         if candidat.afectacio.dia is None and candidat.evolucio.dia is None:
             if dies_derivats is None:
-                dies_derivats = _dies_derivats(avis)
+                dies_derivats = _dies_derivats(episodi, avis)
             dia_derivat = (
-                dies_derivats[candidat.index]
-                if candidat.index < len(dies_derivats)
+                dies_derivats.dies[candidat.index]
+                if candidat.index < len(dies_derivats.dies)
                 else None
             )
         else:
@@ -492,20 +561,66 @@ def _projecta_bandes(
         if interval is None:
             continue
         inici, fi = interval
-        projeccions_avis.append(
-            _projecta(
-                episodi=episodi,
-                avis=avis,
-                evolucio=candidat.evolucio,
-                afectacio=candidat.afectacio,
-                periode=_periode_canonic(hores),
-                dia=dia,
-                inici=inici,
-                fi=fi,
-                now=now,
-            )
+        projeccio = _projecta(
+            episodi=episodi,
+            avis=avis,
+            evolucio=candidat.evolucio,
+            afectacio=candidat.afectacio,
+            periode=_periode_canonic(hores),
+            dia=dia,
+            inici=inici,
+            fi=fi,
+            now=now,
         )
-    return projeccions_avis
+        if dia_derivat is None:
+            projeccions_avis.append(projeccio)
+        else:
+            derivades.append(projeccio)
+    if dies_derivats is not None and dies_derivats.collapsats:
+        derivades = _pic_per_dia_i_franja(derivades)
+    return projeccions_avis + derivades
+
+
+def _pic_per_dia_i_franja(
+    afectacions: Iterable[AfectacioProjectada],
+) -> list[AfectacioProjectada]:
+    """One projection per (day, band): the most severe one, deterministically.
+
+    What the abandoned derived-day inference needs: once every forecast day falls
+    back on the same date, the same band of the same comarca would otherwise be
+    reported once per forecast day, which is the wrong count the derivation exists
+    to avoid. Keeping the highest grade is the safe direction for a hazard
+    integration, where under-reporting danger is the worst failure.
+
+    The winner is picked by grade, then threshold level, then a canonical order
+    over the remaining fields, and **never by arrival order**: the order of the
+    affectations inside the payload is not a property the source guarantees from
+    one request to the next, so letting it decide would make the reported grade
+    and comment flip between polls with no change in the data at all.
+    """
+    pics: dict[tuple[date, str], AfectacioProjectada] = {}
+    for afectacio in sorted(afectacions, key=_ordre_canonic):
+        pics.setdefault((afectacio.dia, afectacio.periode), afectacio)
+    return list(pics.values())
+
+
+def _ordre_canonic(
+    afectacio: AfectacioProjectada,
+) -> tuple[int, int, str, str, str, str, str, bool, datetime, datetime, int]:
+    """Total order over a projection: severest first, then its own content."""
+    return (
+        -afectacio.perill,
+        -afectacio.nivell,
+        afectacio.meteor_nom,
+        afectacio.tipus_nom,
+        afectacio.llindar,
+        afectacio.comentari,
+        afectacio.distribucio_geografica or "",
+        afectacio.auxiliar,
+        afectacio.inici,
+        afectacio.fi,
+        afectacio.id_comarca,
+    )
 
 
 def _projecta_temps_violent(
@@ -523,19 +638,26 @@ def _projecta_temps_violent(
     future-dated emission, i.e. clock skew) reports nothing rather than
     pretending to be a forecast.
 
-    The two-hour window is still **clipped by the warning's own `dataFi`**, the
-    same `min()` `_interval_efectiu` applies to every other type: a projection
-    whose `fi` outlived the `data_fi` it carries would contradict itself, and
-    saying a hail nowcast is in force 90 minutes after the SMC declared it over
-    is the same class of error as a silent zero, in the other direction. When the
-    clipping leaves nothing (a `dataFi` at or before the emission) the nowcast is
-    not reported at all rather than as a zero-length live window.
+    The two-hour window is **clipped by the warning's own `dataFi` only when that
+    end actually constrains it**, meaning `dataFi` is later than the emission: the
+    same `min()` `_interval_efectiu` applies to every other type, because a
+    projection whose `fi` outlived the `data_fi` it carries would contradict
+    itself, and saying a hail nowcast is in force 90 minutes after the SMC
+    declared it over is the same class of error as a silent zero, in the other
+    direction.
+
+    A `dataFi` that is absent, or at or before the emission, is **not usable as a
+    bound**, and then the full two hours stand and the shape is reported once. A
+    nowcast that vanishes is worse than one that lingers: lingering makes someone
+    check the sky and see nothing, vanishing makes a maximum-grade hail warning
+    read as no danger, which is also what the two-hour rule of the acceptance
+    criteria requires. Both branches keep `fi` and `data_fi` consistent.
 
     ⚠️ Unverified against real data: there is **no captured temps-violent payload**
     under `docs/captures/`, so what `dataFi` actually carries for a nowcast is an
     assumption (the planned `tests/fixtures/smp_temps_violent_sample.json` of
     docs/04-architecture.md §1 does not exist yet). Capture the first real one
-    observed and re-check this clipping against it.
+    observed into `docs/captures/` and re-check **both branches** against it.
 
     The listed bands collapse to a single projection, the most severe one, so a
     nowcast repeated across two bands is not counted as two live warnings.
@@ -563,29 +685,31 @@ def _projecta_temps_violent(
             avis.tipus_nom,
         )
         return []
-    candidat = max(
-        triples,
-        key=lambda candidat: (candidat.afectacio.perill, candidat.afectacio.nivell),
-    )
     inici = _as_utc(emissio)
-    fi = inici + FINESTRA_TEMPS_VIOLENT
-    if avis.data_fi is not None:
-        fi = min(fi, _as_utc(avis.data_fi))
-    if fi <= inici:
-        _LOGGER.debug(
-            "Violent-weather warning %r ends at %s, at or before its issue time %s, "
-            "ignoring it",
-            avis.tipus_nom,
-            avis.data_fi,
-            inici.isoformat(),
-        )
-        return []
     if now < inici:
         _LOGGER.debug(
             "Violent-weather warning issued in the future (%s), not announcing it",
             inici.isoformat(),
         )
         return []
+    candidat = max(
+        triples,
+        key=lambda candidat: (candidat.afectacio.perill, candidat.afectacio.nivell),
+    )
+    fi = inici + FINESTRA_TEMPS_VIOLENT
+    data_fi = _as_utc(avis.data_fi) if avis.data_fi is not None else None
+    if data_fi is not None and data_fi > inici:
+        fi = min(fi, data_fi)
+    elif data_fi is not None:
+        _reporta_un_cop(
+            _MOTIU_FI_TEMPS_VIOLENT,
+            _identitat_avis(episodi, avis),
+            "Violent-weather warning for %r ends at %s, at or before its issue time "
+            "%s: keeping the full two-hour window",
+            episodi.meteor_nom,
+            avis.data_fi,
+            inici.isoformat(),
+        )
     return [
         _projecta(
             episodi=episodi,
@@ -626,22 +750,29 @@ def projeccions(
     Identical projections collapse into one: the same band of the same comarca at
     the same grade over the same interval is one affectation however many times
     the feed says it, and counting it twice would show a wrong number in a count
-    sensor. Anything that differs in any field, grade included, is kept.
+    sensor. Anything that differs in any field, grade included, is kept here; the
+    stronger per-(day, band) collapse belongs to the derived-day fallback alone.
+
+    The walk also bounds the report memo: reports for emissions this snapshot no
+    longer carries are forgotten, so it can never outgrow the snapshot.
     """
     now = _as_utc(now_utc)
     resultat: list[AfectacioProjectada] = []
+    presents: set[_IdentitatAvis] = set()
     for episodi in episodis:
         if not episodi.is_open:
             continue
         for avis in episodi.avisos:
             if not avis.is_open:
                 continue
+            presents.add(_identitat_avis(episodi, avis))
             candidates = _afectacions_de_la_comarca(avis, id_comarca)
             resultat.extend(
                 _projecta_temps_violent(episodi, avis, candidates, now)
                 if avis.tipus is TipusAvis.TEMPS_VIOLENT
                 else _projecta_bandes(episodi, avis, candidates, now)
             )
+    _purga_incidencies(presents)
     return sorted(_sense_duplicats(resultat), key=_ordre_cronologic)
 
 
