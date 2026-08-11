@@ -801,8 +801,10 @@ def compute_payload_hash(episodis_raw: Any = None, preavisos_raw: Any = None) ->
     either, or the caller loses its last good state over an unhashable payload.
     """
     raw = {"episodis": episodis_raw, "preavisos": preavisos_raw}
-    # `surrogatepass` because `json.loads` happily produces lone surrogates from a
-    # `"\udcxx"` escape, and plain UTF-8 encoding of one raises.
+    # `surrogatepass` because the `repr` fallback below reproduces text verbatim,
+    # lone surrogates included, and strict UTF-8 encoding of one raises. The
+    # canonical `json.dumps()` path escapes its output to ASCII, so it never gets
+    # here with one.
     return hashlib.sha256(_hash_source(raw).encode(errors="surrogatepass")).hexdigest()
 
 

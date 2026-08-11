@@ -90,8 +90,16 @@ class ApiKeySource:  # api.meteo.cat amb x-api-key
 ```
 
 El `SmpSnapshot` el defineix el §4. El seu `payload_hash` hi és per saltar-se el
-reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` que
+reprocessament quan res no ha canviat: el substitut del `Last-Modified` que
 `geosphere_austria_warnings` sí que té i nosaltres no.
+
+⚠️ **No és més barat que parsejar.** La canonicalització de
+`models.compute_payload_hash()` és O(mida × profunditat) (cada subarbre es reserialitza
+un cop per nivell d'avantpassat per construir la clau d'ordenació) i costa uns pocs
+mil·lisegons per crida, més que `parse_snapshot()` sol sobre el payload d'una pàgina
+real. Existeix per estalviar-se la feina de riu avall (la projecció per comarca i les
+escriptures d'estat), no el parseig. Si aquest bescanvi surt a compte a la pràctica
+**no està mesurat**: el que se sap és que és una despesa fixa per cicle de sondeig.
 
 ⚠️ El hash s'ha de calcular sobre una forma **canonicalitzada, insensible a l'ordre** del
 payload: la llista `afectacions` torna **rotada** entre peticions encara que les dades

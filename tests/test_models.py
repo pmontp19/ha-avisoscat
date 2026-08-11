@@ -953,15 +953,24 @@ def test_payload_hash_falls_back_to_a_constant_when_nothing_is_representable(
     assert "reporting it as unchanged" in caplog.text
 
 
-def test_payload_hash_survives_lone_surrogates_in_external_text() -> None:
-    """A `"\\udcxx"` escape decodes to a lone surrogate; hashing it must not raise.
+def test_payload_hash_survives_a_lone_surrogate_in_the_fallback_text() -> None:
+    """Text that no UTF-8 encoder accepts still produces a digest, not a crash.
 
-    `json.loads` accepts the escape, so the text reaches this helper, and plain
-    UTF-8 encoding of a lone surrogate raises `UnicodeEncodeError`.
+    The canonical `json.dumps()` path always escapes its output to ASCII, so the
+    only way a lone surrogate reaches the digest is through the `repr` fallback.
+    This payload takes exactly that route: the canonicalisation fails on it, and
+    the `repr` it falls back to carries a bare `\\udcff` that strict UTF-8
+    encoding refuses.
     """
-    payload = json.loads(r'[{"comentari": "Xafecs \udcff"}]')
 
-    assert len(compute_payload_hash(payload)) == 64
+    class LoneSurrogateRepr:
+        def __repr__(self) -> str:
+            return "Xàfecs \udcff"
+
+        def __str__(self) -> str:
+            raise RuntimeError("no text form")
+
+    assert len(compute_payload_hash([LoneSurrogateRepr()])) == 64
 
 
 # ---------------------------------------------------------------------------
