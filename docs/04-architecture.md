@@ -512,7 +512,10 @@ Onze decisions que no es llegeixen del sketch:
 
 ⚠️ Com que la vigència depèn del rellotge, el coordinator **no** pot limitar-se a recalcular
 quan arriba dada nova. `__init__.py` registra un `async_track_time_change` cada minut que
-força `coordinator.async_set_updated_data(recompute())` sense fer cap petició de xarxa.
+torna a projectar el snapshot en cache i, si les projeccions han canviat, notifica les
+entitats via `async_update_listeners` — sense cap petició de xarxa. Ho fa **expressament**
+sense `async_set_updated_data`, perquè aquesta reprograma el poll i cridar-la cada minut
+l'aniria endarrerint indefinidament.
 Sense això, un avís que comença a les 12:00 UTC no s'encendria fins al següent poll.
 
 ---
