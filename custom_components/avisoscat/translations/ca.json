@@ -10,10 +10,64 @@
         "data_description": {
           "location": "Els avisos es publiquen per comarca; el marcador només serveix per triar quina se segueix."
         }
+      },
+      "comarca": {
+        "title": "Avisos Meteocat",
+        "description": "La ubicació no s'ha pogut resoldre en una comarca. Trieu la comarca que voleu seguir.",
+        "data": {
+          "id_comarca": "Comarca"
+        },
+        "data_description": {
+          "id_comarca": "Una entrada per comarca. Més endavant en podeu afegir d'altres per a altres llocs."
+        }
+      },
+      "options": {
+        "title": "Avisos Meteocat",
+        "description": "Trieu quins fenòmens seguir i a partir de quin grau un avís es considera greu.",
+        "data": {
+          "api_key": "Clau API (opcional)",
+          "meteors": "Fenòmens",
+          "severe_threshold": "Llindar d'avís greu",
+          "include_sea": "Inclou la zona marítima",
+          "scan_interval": "Interval de consulta"
+        },
+        "data_description": {
+          "api_key": "Deixeu-ho en blanc per fer servir la font pública sense clau. Si s'indica, la clau es valida contra l'API de Meteocat.",
+          "meteors": "Es crea un sensor per cada fenomen seleccionat.",
+          "severe_threshold": "Grau de perill (1-6) a partir del qual s'encén l'avís greu. El 3 és la banda oficial «Alt».",
+          "include_sea": "Segueix també la zona marítima davant d'aquesta comarca.",
+          "scan_interval": "Minuts entre consultes. Deixeu-ho en blanc per al sondeig adaptatiu."
+        }
       }
+    },
+    "error": {
+      "location_outside_catalonia": "La ubicació és fora de Catalunya. Trieu una comarca de la llista.",
+      "cannot_connect": "No s'ha pogut connectar amb Meteocat. Comproveu la connexió i torneu-ho a provar.",
+      "invalid_geometry": "No s'ha pogut llegir el mapa de comarques. Trieu una comarca de la llista.",
+      "invalid_auth": "La clau API ha estat rebutjada. Comproveu-la i torneu-ho a provar."
     },
     "abort": {
       "already_configured": "Aquesta comarca ja està configurada."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Avisos Meteocat",
+        "description": "Trieu quins fenòmens seguir i a partir de quin grau un avís es considera greu. La clau API es gestiona per separat.",
+        "data": {
+          "meteors": "Fenòmens",
+          "severe_threshold": "Llindar d'avís greu",
+          "include_sea": "Inclou la zona marítima",
+          "scan_interval": "Interval de consulta"
+        },
+        "data_description": {
+          "meteors": "Es crea un sensor per cada fenomen seleccionat.",
+          "severe_threshold": "Grau de perill (1-6) a partir del qual s'encén l'avís greu. El 3 és la banda oficial «Alt».",
+          "include_sea": "Segueix també la zona marítima davant d'aquesta comarca.",
+          "scan_interval": "Minuts entre consultes. Deixeu-ho en blanc per al sondeig adaptatiu."
+        }
+      }
     }
   }
 }

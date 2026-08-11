@@ -93,6 +93,7 @@ DEGRADED_FAILURE_THRESHOLD = 3
 CONF_API_KEY = "api_key"
 CONF_COMARCA = "comarca"
 CONF_ID_COMARCA = "id_comarca"
+CONF_LOCATION = "location"
 
 # ---------------------------------------------------------------------------
 # Option keys (docs/03-feature-spec.md §2, step 2 and options flow)
