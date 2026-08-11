@@ -90,16 +90,41 @@ class ApiKeySource:  # api.meteo.cat amb x-api-key
 ```
 
 El `SmpSnapshot` el defineix el §4. El seu `payload_hash` hi és per saltar-se el
-reprocessament quan res no ha canviat: l'equivalent barat del `Last-Modified` que
+reprocessament quan res no ha canviat: el substitut del `Last-Modified` que
 `geosphere_austria_warnings` sí que té i nosaltres no.
+
+⚠️ **No és més barat que parsejar.** La canonicalització de
+`models.compute_payload_hash()` és O(mida × profunditat) (cada subarbre es reserialitza
+un cop per nivell d'avantpassat per construir la clau d'ordenació) i costa uns pocs
+mil·lisegons per crida, més que `parse_snapshot()` sol sobre el payload d'una pàgina
+real. Existeix per estalviar-se la feina de riu avall (la projecció per comarca i les
+escriptures d'estat), no el parseig. Si aquest bescanvi surt a compte a la pràctica
+**no està mesurat**: el que se sap és que és una despesa fixa per cicle de sondeig.
 
 ⚠️ El hash s'ha de calcular sobre una forma **canonicalitzada, insensible a l'ordre** del
 payload: la llista `afectacions` torna **rotada** entre peticions encara que les dades
 siguin idèntiques, de manera que un hash del payload cru canviaria a cada cicle i no
 estalviaria res (ni ell ni l'`always_update=False` del §7)
-(`docs/captures/smp-page-choice-2026-08-06.md`). Aquesta canonicalització **encara no està
-implementada**: la tanca la mateixa tasca futura que ha de llegir `afectacions` al model
-(trap 12 de [`01-data-sources.md`](01-data-sources.md) §6).
+(`docs/captures/smp-page-choice-2026-08-06.md`). `models.compute_payload_hash()` fa
+aquesta canonicalització: ordena recursivament cada llista pel seu propi JSON canònic
+abans d'`hashlib.sha256`, de manera que el mateix contingut sempre produeix el mateix
+hash independentment de l'ordre que el feed li hagi donat
+(`tests/test_models.py::test_payload_hash_is_stable_across_shuffled_affectation_order`).
+No llança mai, igual que `parse_snapshot()`: si no pot canonicalitzar el payload (un
+imbricament que exhaureix el límit de recursió, per exemple) avisa i degrada a un digest
+de la forma crua, perquè un payload il·legible no pot tombar l'actualització.
+
+El client `smp.py` (encara no construït) és qui l'ha de cridar sobre el payload cru, i
+**el que ha de decidir si es reprocessa és la igualtat d'aquest hash**, no una comparació
+posterior de payloads crus: aquesta és la porta insensible a l'ordre. El `payload_hash`
+que es passa a `parse_snapshot()` és el mateix valor, desat a l'snapshot per poder-lo
+comparar al cicle següent. Com a segona barrera, `parse_snapshot()` també desa les
+afectacions en ordre canònic (§4), de manera que la igualtat d'snapshots per valor no
+depèn de l'ordre en què hagin arribat **les afectacions** (l'única llista que el feed està
+documentat que rota). L'abast acaba aquí: `Avis.evolucions` és una tuple que compara per
+posició i no s'ordena canònicament, per tant una rotació d'`evolucions` sí que faria
+diferir dos snapshots de contingut idèntic. La porta insensible a l'ordre en general és el hash, no la
+comparació d'snapshots.
 
 ### `PublicPageSource`
 
@@ -212,6 +237,14 @@ class Avis:
     data_inici: datetime | None
     data_fi: datetime | None
     evolucions: tuple[Evolucio, ...]
+    # Només l'avís de temps violent: penja les afectacions de l'avís (trap 12)
+    afectacions_directes: tuple[Afectacio, ...] = ()
+    # El grau que l'avís declara sobre si mateix; 0 = no enviat, no "cap perill"
+    perill_declarat: int = 0
+
+    @property
+    def totes_afectacions(self) -> tuple[Afectacio, ...]:
+        """Les de `evolucions` + les `afectacions_directes`. El que s'ha de llegir."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,13 +281,26 @@ class SmpSnapshot:
     payload_hash: str | None = None
 ```
 
-Tres decisions del model que no es llegeixen del sketch:
+Decisions del model que no es llegeixen del sketch:
 
 - Els `date | None` i el `TipusAvis | None` són deliberats: un dia o un literal de
   tipus il·legible no ha de descartar l'afectació ni l'avís sencers. El literal cru
   sempre queda a `tipus_nom`, igual que `meteor_nom`.
 - Les col·leccions són tuples perquè els dataclasses congelats comparin per valor. És
-  el que permetrà al coordinator comparar snapshots amb `always_update=False` (§7).
+  el que permetrà al coordinator comparar snapshots amb `always_update=False` (§7). Com
+  que les tuples comparen per posició i el feed retorna les `afectacions` **rotades**
+  entre peticions (§3.1 de [`01-data-sources.md`](01-data-sources.md)), `parse_snapshot()`
+  les desa en un **ordre canònic propi** (comarca, nivell, dia, grau, llindar, auxiliar) i
+  no en l'ordre del feed: altrament dos snapshots idèntics compararien diferent.
+- `Avis` porta `afectacions_directes` a més de `evolucions` (trap 12) i l'agregador
+  `totes_afectacions` és el que han de llegir els consumidors: cadascun dels dos camps
+  és buit en la forma d'avís de l'altre, i llegir-ne només un torna «cap perill» en
+  silenci precisament en l'avís més urgent.
+- `Avis.perill_declarat` desa el grau que l'avís de temps violent declara sobre l'objecte
+  de l'avís (el `perill: 6.0` de l'exemple del §6 de
+  [`01-data-sources.md`](01-data-sources.md)). `perill_maxim` és el màxim de les tres
+  fonts: si les `afectacions` d'aquell avís arriben `null` (trap 3) o cap entrada no és
+  usable, el grau declarat és l'única cosa que evita tornar a llegir 0 en un avís vigent.
 - `parse_snapshot()` **no llança mai**: entrada malformada → snapshot buit i un
   warning. Cada entrada (episodi, avís, evolució, franja, afectació) se salta
   individualment, de manera que un membre malformat no descarti els veïns sans.
@@ -264,10 +310,11 @@ mateix test de tancament.
 
 ### Els traps de tolerància, codificats
 
-Els **11 primers** traps de [`01-data-sources.md`](01-data-sources.md) §6 tenen un helper i
-un test. El **trap 12** (l'avís de temps violent amb `afectacions` penjant directament de
-l'avís) es va documentar més tard i **encara no està implementat**: l'abast i la conseqüència
-(`perill_maxim == 0` en un avís vigent) són al §6 d'aquell document.
+Els **dotze** traps de [`01-data-sources.md`](01-data-sources.md) §6 tenen un helper i un
+test. El **trap 12** (l'avís de temps violent amb `afectacions` penjant directament de
+l'avís) es va documentar més tard i es va tancar amb `afectacions_directes` i
+`totes_afectacions`; la conseqüència que evita (`perill_maxim == 0` en un avís de grau 6
+vigent) és al §6 d'aquell document.
 
 | Trap | Implementació |
 | --- | --- |
@@ -282,6 +329,7 @@ l'avís) es va documentar més tard i **encara no està implementat**: l'abast i
 | `idComarca` desconegut | `comarques.nom(id)` → `f"Comarca {id}"` amb warning |
 | Text extern | El model el desa verbatim, mai escapat ni reformat; mai HTML a l'altra banda (§11) i el README avisa |
 | Parseig explícit de dates | `_parse_datetime()` / `_parse_date()`: `None` + warning si el timestamp no es pot llegir, i naïf assumit UTC |
+| `afectacions` penjant de l'avís (temps violent) | `_parse_avis()` llegeix `avis["afectacions"]` cap a `Avis.afectacions_directes`, i `Avis.totes_afectacions` (que és el que llegeixen `perill_maxim` i els consumidors) uneix les dues formes |
 
 ---
 

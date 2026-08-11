@@ -29,6 +29,7 @@ from custom_components.avisoscat.models import (
     Preavis,
     SmpSnapshot,
     TipusAvis,
+    compute_payload_hash,
     is_closed,
     parse_snapshot,
 )
@@ -776,6 +777,316 @@ def test_naive_timestamps_are_assumed_utc() -> None:
 
     assert snapshot.episodis[0].avisos[0].data_inici == datetime(
         2026, 8, 4, 12, 0, tzinfo=UTC
+    )
+
+
+# ---------------------------------------------------------------------------
+# Trap #12 — a "temps violent" vigilance avis carries `afectacions` directly,
+# with no `evolucions`/`periodes` wrapper (docs/01-data-sources.md §6)
+# ---------------------------------------------------------------------------
+
+
+def test_trap_12_violent_weather_afectacions_hang_directly_off_the_avis() -> None:
+    """A grade-6 vigilance avis reads as grade 6, not 0, with no `evolucions`.
+
+    This is the shape measured live 2026-08-06
+    (`docs/captures/smp-page-choice-2026-08-06.md`): the avis has no
+    `evolucions` key at all, so walking `evolucions` alone finds nothing and
+    the most urgent warning the integration exists to surface would silently
+    read as no danger.
+    """
+    raw_avis = {
+        "tipus": "Avís Vigilància per Temps Violent",
+        "comentari": "",
+        "representatiu": "1",
+        "llindar1": "Pedra de diàmetre > 2 cm, ratxes de vent > 90 km/h (25 m/s)",
+        "perill": 6.0,
+        "dataInici": "2026-08-06T12:43Z",
+        "dataFi": "2026-08-06T14:43Z",
+        "dataEmisio": "2026-08-06T12:43Z",
+        "estat": "Vigent",
+        "afectacions": [
+            {
+                "llindar": "Pedra > 2 cm, ratxes > 90 km/h (25 m/s)",
+                "auxiliar": False,
+                "perill": 6.0,
+                "idComarca": 15.0,
+                "nivell": 2.0,
+            }
+        ],
+    }
+    snapshot = parse_snapshot([_episodi(avisos=[raw_avis])])
+
+    avis = snapshot.episodis[0].avisos[0]
+    assert avis.evolucions == ()
+    direct = Afectacio(
+        id_comarca=15,
+        perill=6,
+        nivell=2,
+        llindar="Pedra > 2 cm, ratxes > 90 km/h (25 m/s)",
+        auxiliar=False,
+        dia=None,
+    )
+    assert avis.afectacions_directes == (direct,)
+    # The aggregator is what a per-comarca consumer reads, so it has to carry the
+    # direct affectation too: comarca 15 must be reachable without knowing which
+    # of the two shapes this avis happens to use.
+    assert avis.totes_afectacions == (direct,)
+    assert avis.perill_declarat == 6
+    assert avis.perill_maxim == 6
+
+
+@pytest.mark.parametrize(
+    "afectacions",
+    [
+        pytest.param(None, id="null_afectacions"),
+        pytest.param([], id="empty_afectacions"),
+        pytest.param(["not an object"], id="unusable_afectacions"),
+    ],
+)
+def test_trap_12_the_avis_grade_survives_losing_its_afectacions(
+    afectacions: object,
+) -> None:
+    """A grade-6 vigilance avis still reads as 6 when its affectations are gone.
+
+    The same avis states `perill: 6.0` on itself, so an `afectacions` that
+    arrives `null` (the legitimate empty shape of trap #3), empty, or holding
+    nothing usable must not take the grade down with it. Reading only the
+    affectations is the silent-zero failure of trap #12 by another route.
+    """
+    raw_avis = {
+        "tipus": "Avís Vigilància per Temps Violent",
+        "perill": 6.0,
+        "dataEmisio": "2026-08-06T12:43Z",
+        "estat": "Vigent",
+        "afectacions": afectacions,
+    }
+    snapshot = parse_snapshot([_episodi(avisos=[raw_avis])])
+
+    avis = snapshot.episodis[0].avisos[0]
+    assert avis.totes_afectacions == ()
+    assert avis.perill_declarat == 6
+    assert avis.perill_maxim == 6
+
+
+def test_an_ordinary_avis_declares_no_grade_of_its_own() -> None:
+    """The ordinary shape sends no avis-level `perill`, and 0 must not win.
+
+    Every rain and wind avis of both real captures leaves `perill` out, so the
+    absent-grade default has to lose to the affectations, never mask them.
+    """
+    snapshot = parse_snapshot(
+        [_with_periodes({"nom": "12-18", "afectacions": [_afectacio(perill=4.0)]})]
+    )
+
+    avis = snapshot.episodis[0].avisos[0]
+    assert avis.perill_declarat == 0
+    assert avis.perill_maxim == 4
+
+
+def test_trap_12_direct_afectacions_combine_with_evolucions_afectacions() -> None:
+    """Both sources of affectation count towards the emission's worst grade."""
+    banded = Afectacio(
+        id_comarca=1,
+        perill=2,
+        nivell=1,
+        llindar="",
+        auxiliar=False,
+        dia=None,
+    )
+    direct = Afectacio(
+        id_comarca=15,
+        perill=6,
+        nivell=2,
+        llindar="",
+        auxiliar=False,
+        dia=None,
+    )
+    avis = Avis(
+        tipus=TipusAvis.TEMPS_VIOLENT,
+        tipus_nom="Avís Vigilància per Temps Violent",
+        estat="Vigent",
+        data_emissio=None,
+        data_inici=None,
+        data_fi=None,
+        evolucions=(
+            Evolucio(
+                dia=None,
+                comentari="",
+                llindar_baix=None,
+                llindar_alt=None,
+                distribucio_geografica=None,
+                representatiu=None,
+                periodes={"12-18": (banded,)},
+            ),
+        ),
+        afectacions_directes=(direct,),
+    )
+
+    assert avis.totes_afectacions == (banded, direct)
+    assert avis.perill_maxim == 6
+
+
+# ---------------------------------------------------------------------------
+# `compute_payload_hash()` — order-insensitive for the unstable `afectacions`
+# list (docs/04-architecture.md §3, docs/01-data-sources.md §6 trap #12)
+# ---------------------------------------------------------------------------
+
+
+def test_payload_hash_is_stable_across_shuffled_affectation_order() -> None:
+    """Identical content in a different `afectacions` order hashes the same.
+
+    The feed returns `afectacions` rotated between requests even when nothing
+    changed; a hash sensitive to that order would flip every cycle and defeat
+    `always_update=False`.
+    """
+    affectations = [
+        {"idComarca": 1.0, "perill": 2.0, "nivell": 1.0, "auxiliar": False},
+        {"idComarca": 2.0, "perill": 3.0, "nivell": 1.0, "auxiliar": False},
+        {"idComarca": 3.0, "perill": 1.0, "nivell": 2.0, "auxiliar": True},
+    ]
+    band = {"nom": "12-18", "afectacions": affectations}
+    rotated_band = {"nom": "12-18", "afectacions": affectations[1:] + affectations[:1]}
+
+    original = [_with_periodes(band)]
+    reordered = [_with_periodes(rotated_band)]
+
+    assert compute_payload_hash(original) == compute_payload_hash(reordered)
+
+
+def test_payload_hash_changes_when_the_content_actually_changes() -> None:
+    """The canonicalisation does not hide a real change in grade."""
+    band = {"nom": "12-18", "afectacions": [_afectacio(perill=2.0)]}
+    changed_band = {"nom": "12-18", "afectacions": [_afectacio(perill=4.0)]}
+
+    assert compute_payload_hash([_with_periodes(band)]) != compute_payload_hash(
+        [_with_periodes(changed_band)]
+    )
+
+
+def test_payload_hash_never_raises_on_input_parse_snapshot_tolerates(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Nesting the recursive canonicalisation cannot handle still yields a digest.
+
+    `parse_snapshot()` degrades to an empty snapshot on this payload, so the hash
+    helper beside it must degrade too: a crash here would take the whole update
+    down and lose the last good state (`CLAUDE.md`), for a payload the parser was
+    already happy to shrug off.
+    """
+    deep: object = []
+    for _ in range(sys.getrecursionlimit() + 500):
+        deep = [deep]
+
+    with caplog.at_level(logging.WARNING):
+        digest = compute_payload_hash([deep])
+
+    assert parse_snapshot([deep]).is_empty
+    assert len(digest) == 64
+    assert "falling back to its raw form" in caplog.text
+
+
+def test_payload_hash_falls_back_to_a_constant_when_nothing_is_representable(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Even a value that cannot be turned into text at all produces a digest.
+
+    The fixed digest only makes two unusable payloads compare equal to each
+    other: coming from a usable one it still reads as a change, so a caller must
+    not read "the digest moved" as "the payload is usable".
+    """
+
+    class Unrepresentable:
+        def __repr__(self) -> str:
+            raise RuntimeError("no text form")
+
+    with caplog.at_level(logging.WARNING):
+        digest = compute_payload_hash([Unrepresentable()])
+
+    assert len(digest) == 64
+    assert "using a fixed digest for it" in caplog.text
+    assert digest == compute_payload_hash([Unrepresentable()])
+    assert digest != compute_payload_hash([_with_periodes()])
+
+
+def test_payload_hash_survives_a_lone_surrogate_in_the_fallback_text() -> None:
+    """Text that no UTF-8 encoder accepts still produces a digest, not a crash.
+
+    The canonical `json.dumps()` path always escapes its output to ASCII, so the
+    only way a lone surrogate reaches the digest is through the `repr` fallback.
+    This payload takes exactly that route: the canonicalisation fails on it, and
+    the `repr` it falls back to carries a bare `\\udcff` that strict UTF-8
+    encoding refuses.
+    """
+
+    class LoneSurrogateRepr:
+        def __repr__(self) -> str:
+            return "Xàfecs \udcff"
+
+        def __str__(self) -> str:
+            raise RuntimeError("no text form")
+
+    assert len(compute_payload_hash([LoneSurrogateRepr()])) == 64
+
+
+# ---------------------------------------------------------------------------
+# Parsed affectations are in canonical order, not the feed's unstable one
+# (docs/01-data-sources.md §3.1)
+# ---------------------------------------------------------------------------
+
+
+def test_snapshots_compare_equal_when_only_the_affectation_order_rotated() -> None:
+    """A rotated `afectacions` list must not make two equal snapshots differ.
+
+    The frozen dataclasses compare by value and their collections are tuples,
+    which compare positionally, so feed order would leak into snapshot equality
+    and defeat the coordinator's `always_update=False`.
+    """
+    affectations = [
+        _afectacio(idComarca=24.0, perill=2.0),
+        _afectacio(idComarca=7.0, perill=4.0),
+        _afectacio(idComarca=41.0, perill=1.0),
+    ]
+    band = {"nom": "12-18", "afectacions": affectations}
+    rotated = {"nom": "12-18", "afectacions": affectations[1:] + affectations[:1]}
+
+    snapshot = parse_snapshot([_with_periodes(band)])
+    assert snapshot == parse_snapshot([_with_periodes(rotated)])
+
+    afectacions = _only_evolucio(snapshot).periodes["12-18"]
+    assert [af.id_comarca for af in afectacions] == [7, 24, 41]
+
+
+def test_direct_afectacions_are_canonically_ordered_too() -> None:
+    """The trap #12 shape reads from the same unstable list, so it sorts as well."""
+    affectations = [
+        _afectacio(idComarca=15.0, perill=6.0),
+        _afectacio(idComarca=3.0, perill=6.0),
+    ]
+    avis = _avis(afectacions=affectations, evolucions=None)
+    rotated_avis = _avis(afectacions=affectations[::-1], evolucions=None)
+
+    snapshot = parse_snapshot([_episodi(avisos=[avis])])
+    rotated_snapshot = parse_snapshot([_episodi(avisos=[rotated_avis])])
+
+    assert snapshot == rotated_snapshot
+    directes = snapshot.episodis[0].avisos[0].afectacions_directes
+    assert [af.id_comarca for af in directes] == [3, 15]
+
+
+def test_affectations_sharing_a_sort_key_still_order_deterministically() -> None:
+    """Entries equal on comarca, band level, day and grade sort by their own text.
+
+    A partial sort key would leave these two in feed order, which is the order
+    that is not stable, so the canonical order has to be total.
+    """
+    high = _afectacio(llindar="Ratxes > 90 km/h")
+    low = _afectacio(llindar="Ratxes > 72 km/h")
+    band = {"nom": "12-18", "afectacions": [high, low]}
+    rotated = {"nom": "12-18", "afectacions": [low, high]}
+
+    assert parse_snapshot([_with_periodes(band)]) == parse_snapshot(
+        [_with_periodes(rotated)]
     )
 
 

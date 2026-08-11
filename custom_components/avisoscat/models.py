@@ -5,9 +5,16 @@ testable in complete isolation (docs/04-architecture.md §4). It takes already
 decoded JSON and returns typed objects. No network, no I/O, no HTML.
 
 The keyless `meteo.cat` inline payload is not an official API, so every field is
-read with `.get()` plus a default and every conversion is tolerant. The eleven
-tolerance traps of docs/01-data-sources.md §6 are implemented here; each one has
-a dedicated test in `tests/test_models.py`.
+read with `.get()` plus a default and every conversion is tolerant. What this
+module implements from docs/01-data-sources.md §6 is the reading of that payload:
+status literals, float numbers, `null` collections, repeated emissions,
+unrecognised text kept verbatim, JSON-supplied band keys and the three avis
+shapes. Each trap implemented here has a `test_trap_*` test in
+`tests/test_models.py`. Not every trap of §6 belongs to this module: trap 7's
+readable comarca fallback lives in `comarques.py`, trap 10's "no HTML" rule
+applies where the text is rendered, and trap 11 is the CECAT `fasedatahora`
+format, which this integration does not read at all (its test only pins that such
+a timestamp becomes `None` instead of raising).
 
 Two traps are worth repeating because getting them wrong fails silently:
 
@@ -28,10 +35,29 @@ direction of more tolerance:
   (trap #9) and an unrecognised one must not discard the warning.
 - The collections are tuples, so the frozen dataclasses compare by value, which
   is what lets the coordinator compare snapshots with `always_update=False`.
+  Affectation tuples are therefore sorted into a canonical order rather than
+  kept in feed order: the feed rotates them between requests for identical
+  content (docs/01-data-sources.md §3.1), and positional tuple comparison would
+  report a change every cycle.
+- `Avis` carries its own `afectacions_directes` field, not only in the sketch's
+  `evolucions`: a "temps violent" vigilance avis hangs its affectations
+  directly off the avis, with no `evolucions`/`periodes` wrapper (trap #12).
+  `Avis.totes_afectacions` is the aggregator to read; the two raw fields are
+  each half of the picture and reading one alone silently drops the other shape.
+- `Avis` also keeps the grade that same shape states on the avis object itself,
+  as `perill_declarat`, because affectations can go missing (`null`, trap #3)
+  while the declared grade is right there. `perill_maxim` is the max of every
+  source; no single one of them is safe to read as "the grade".
+- `compute_payload_hash()` exists because the feed rotates `afectacions`
+  between requests even when nothing changed (docs/01-data-sources.md §6,
+  trap #12's companion note at §3.1): a hash of the raw payload must
+  canonicalise list order first, or it would flip every cycle for no reason.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -207,6 +233,10 @@ _CLOSED_ESTAT_PREFIXES: tuple[str, ...] = (
 )
 
 _TRUE_LITERALS = frozenset({"true", "t", "1", "yes", "si", "cert"})
+
+# Last-resort stand-in for a payload that cannot be turned into text at all, so
+# that `compute_payload_hash()` keeps its never-raise contract.
+_UNHASHABLE_PAYLOAD = "avisoscat:unhashable-smp-payload"
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +432,17 @@ class Avis:
     data_inici: datetime | None
     data_fi: datetime | None
     evolucions: tuple[Evolucio, ...]
+    # Only a "temps violent" vigilance avis carries these: its affectations hang
+    # directly off the avis, with no `evolucions`/`periodes` wrapper (trap #12).
+    # Its validity window is 2 h from `data_emissio`, not a 6-hour band. The name
+    # says "directes" on purpose: unlike `Evolucio.afectacions`, this is *not* an
+    # aggregate. Read `totes_afectacions` unless you specifically want this shape.
+    afectacions_directes: tuple[Afectacio, ...] = ()
+    # The grade the avis states on itself, beside `afectacions_directes`: the
+    # "temps violent" shape sends it, the ordinary one does not. 0 therefore means
+    # "not sent", not "no danger", which is why it feeds `perill_maxim` and is
+    # never a grade to read on its own.
+    perill_declarat: int = 0
 
     @property
     def is_open(self) -> bool:
@@ -409,9 +450,35 @@ class Avis:
         return not is_closed(self.estat)
 
     @property
+    def totes_afectacions(self) -> tuple[Afectacio, ...]:
+        """Every affectation of this emission, whichever shape carried it.
+
+        This is what a per-comarca consumer must read. An ordinary rain or wind
+        warning carries its affectations under `evolucions`, a "temps violent"
+        vigilance avis carries them in `afectacions_directes` (trap #12), and
+        either field read on its own silently returns nothing for the other
+        shape: no danger where there is a real warning.
+        """
+        return (
+            tuple(af for ev in self.evolucions for af in ev.afectacions)
+            + self.afectacions_directes
+        )
+
+    @property
     def perill_maxim(self) -> int:
-        """Highest grade across every day and band of this emission."""
-        return max((ev.perill_maxim for ev in self.evolucions), default=0)
+        """Highest grade this emission carries, from every source that states one.
+
+        Every source, because each one alone can be empty on a warning that is
+        very much in force (trap #12). A "temps violent" vigilance avis has no
+        `evolucions`, so the aggregate covers its direct affectations; and its
+        `afectacions` may in turn arrive as `null` (trap #3) or hold nothing
+        usable, so `perill_declarat` covers the grade it states on itself. Read
+        any one of them alone and a grade-6 nowcast reads as no danger.
+        """
+        return max(
+            self.perill_declarat,
+            max((af.perill for af in self.totes_afectacions), default=0),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -469,8 +536,10 @@ class SmpSnapshot:
     episodis: tuple[Episodi, ...] = ()
     preavisos: tuple[Preavis, ...] = ()
     fetched_at: datetime | None = None
-    # Cheap stand-in for the `Last-Modified` the source does not send: lets the
-    # coordinator skip reprocessing when nothing changed.
+    # Stand-in for the `Last-Modified` the source does not send: lets the
+    # coordinator skip the downstream projection and the state writes when nothing
+    # changed. Computing it is not cheaper than parsing (docs/04-architecture.md
+    # §3); what it saves is the work after the parse.
     payload_hash: str | None = None
 
     @property
@@ -524,6 +593,35 @@ def _parse_afectacio(raw: Any) -> Afectacio | None:
     )
 
 
+def _afectacio_sort_key(afectacio: Afectacio) -> tuple[int, int, int, int, str, bool]:
+    """Total order over an affectation's own fields, for canonical tuple order.
+
+    Every field takes part so that the order is total: a partial key would leave
+    entries that share it in feed order, which is exactly the order that is not
+    stable. `dia` is mapped to an ordinal because it is `date | None` and `None`
+    does not compare with a `date`.
+    """
+    return (
+        afectacio.id_comarca,
+        afectacio.nivell,
+        afectacio.dia.toordinal() if afectacio.dia is not None else -1,
+        afectacio.perill,
+        afectacio.llindar,
+        afectacio.auxiliar,
+    )
+
+
+def _canonical_afectacions(afectacions: Iterable[Afectacio]) -> tuple[Afectacio, ...]:
+    """Order affectations canonically instead of keeping the feed's own order.
+
+    The feed returns an `afectacions` list rotated between requests even when the
+    data is identical (docs/01-data-sources.md §3.1). Tuples compare positionally,
+    so parsing in feed order would make two equal snapshots compare unequal and
+    defeat the coordinator's `always_update=False`.
+    """
+    return tuple(sorted(afectacions, key=_afectacio_sort_key))
+
+
 def _parse_periodes(raw_periodes: Any) -> dict[str, tuple[Afectacio, ...]]:
     """Build the band → affectations mapping, keyed by the JSON's own names."""
     periodes: dict[str, tuple[Afectacio, ...]] = {}
@@ -540,7 +638,9 @@ def _parse_periodes(raw_periodes: Any) -> dict[str, tuple[Afectacio, ...]]:
         raw_afectacions = _as_list(raw_periode.get("afectacions"), "afectacions")
         parsed = _parse_all(raw_afectacions, _parse_afectacio)
         periodes[nom] = periodes.get(nom, ()) + parsed
-    return periodes
+    # Sorted after the merge, so a band name repeated in the payload still ends
+    # up in one canonical order rather than two concatenated ones.
+    return {nom: _canonical_afectacions(afs) for nom, afs in periodes.items()}
 
 
 def _parse_evolucio(raw: Any) -> Evolucio | None:
@@ -577,6 +677,16 @@ def _parse_avis(raw: Any) -> Avis | None:
         evolucions=_parse_all(
             _as_list(raw.get("evolucions"), "evolucions"), _parse_evolucio
         ),
+        # `avis["afectacions"]`, not `avis["evolucions"][...]["periodes"][...]`:
+        # the shape a "temps violent" vigilance avis actually uses (trap #12).
+        afectacions_directes=_canonical_afectacions(
+            _parse_all(
+                _as_list(raw.get("afectacions"), "afectacions"), _parse_afectacio
+            )
+        ),
+        # Same avis states its own grade beside them, like the flat pre-warning
+        # shape does. Read so that losing the affectations cannot lose the grade.
+        perill_declarat=_as_int(raw.get("perill"), default=0),
     )
 
 
@@ -648,6 +758,83 @@ def _parse_preavis(raw: Any) -> Preavis | None:
         meteor=meteor,
         meteor_nom=meteor_nom,
     )
+
+
+def _canonicalize_for_hash(value: Any) -> Any:
+    """Recursively sort list entries so equal content hashes equal regardless of order.
+
+    Dict key order never matters (`json.dumps(..., sort_keys=True)` handles that),
+    but list order does: the feed returns `afectacions` rotated between requests
+    for identical content (docs/01-data-sources.md §6, trap #12's companion note
+    at §3.1). Every list is sorted here, keyed by its own canonical JSON form, so
+    the sort is well-defined regardless of what the list holds.
+    """
+    if isinstance(value, dict):
+        return {key: _canonicalize_for_hash(val) for key, val in value.items()}
+    if isinstance(value, list):
+        items = [_canonicalize_for_hash(item) for item in value]
+        return sorted(
+            items, key=lambda item: json.dumps(item, sort_keys=True, default=str)
+        )
+    return value
+
+
+def _hash_source(raw: Any) -> str:
+    """Text whose digest identifies a payload, canonical whenever that is possible.
+
+    Both fallbacks are broad on purpose, for the same reason `parse_snapshot()` is:
+    this runs on JSON scraped out of a remote page, so a shape we have never seen
+    must degrade instead of propagating out of the model layer. The known case is
+    nesting deep enough to exhaust the recursion limit, which `json.loads` accepts
+    and this module's own recursion does not.
+
+    The order of preference is the order of information kept:
+
+    1. the canonical JSON, which ignores the feed's unstable list order;
+    2. the uncanonicalised `repr`, which still identifies the content and at worst
+       reports a change the feed's list rotation invented: one needless reprocess;
+    3. a constant, which only makes two consecutive unusable payloads compare
+       equal to each other. The first unusable payload after a usable one still
+       reads as a change, so a differing digest is never evidence that the
+       payload behind it can be used.
+    """
+    try:
+        return json.dumps(_canonicalize_for_hash(raw), sort_keys=True, default=str)
+    except Exception as err:
+        _LOGGER.warning(
+            "Could not canonicalise the SMP payload for hashing, "
+            "falling back to its raw form: %s",
+            err,
+        )
+    try:
+        return repr(raw)
+    except Exception as err:
+        _LOGGER.warning(
+            "Could not even represent the SMP payload for hashing, "
+            "using a fixed digest for it: %s",
+            err,
+        )
+    return _UNHASHABLE_PAYLOAD
+
+
+def compute_payload_hash(episodis_raw: Any = None, preavisos_raw: Any = None) -> str:
+    """Stable hash of a raw SMP payload, insensitive to its unstable list order.
+
+    Hashing the raw payload as received would flip on every poll even when
+    nothing changed, defeating `always_update=False` (docs/04-architecture.md
+    §3). This canonicalises first, so the same content always produces the same
+    digest no matter how the feed happened to order its lists.
+
+    Never raises, exactly like `parse_snapshot()`: this runs on a payload scraped
+    out of a remote page, so anything the parser tolerates must not crash here
+    either, or the caller loses its last good state over an unhashable payload.
+    """
+    raw = {"episodis": episodis_raw, "preavisos": preavisos_raw}
+    # `surrogatepass` because the `repr` fallback below reproduces text verbatim,
+    # lone surrogates included, and strict UTF-8 encoding of one raises. The
+    # canonical `json.dumps()` path escapes its output to ASCII, so it never gets
+    # here with one.
+    return hashlib.sha256(_hash_source(raw).encode(errors="surrogatepass")).hexdigest()
 
 
 def _flatten(raw: Any) -> list[Any]:

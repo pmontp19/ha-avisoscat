@@ -63,16 +63,17 @@ Cap capçalera `ETag` ni `Last-Modified` a cap de les dues, com ja deia el §3.1
    llindars) i tot i així el payload cru va canviar: la llista d'afectacions d'una franja surt
    **rotada** (mostra 1: comarques `1, 2, 3, …, 43`; mostra 2: `12, 13, …, 43, 1, 2, …, 11`).
 
-   Conseqüència per a tasques posteriors, **fora de l'abast del parser**: un `payload_hash`
-   calculat sobre el payload cru canviarà a cada petició encara que res no hagi canviat, i
-   això buida de sentit tant el `payload_hash` del §3 de `../04-architecture.md` com el
-   `always_update=False` del §7. Cal que el hash (o la comparació d'snapshots) sigui
-   **insensible a l'ordre**.
+   Conseqüència, **fora de l'abast del parser**: un `payload_hash` calculat sobre el
+   payload cru canviarà a cada petició encara que res no hagi canviat, i això buida de
+   sentit tant el `payload_hash` del §3 de `../04-architecture.md` com el
+   `always_update=False` del §7. El hash ha de ser **insensible a l'ordre**; qui ho tanca
+   avui és `models.compute_payload_hash()`, descrit al §3 de
+   [`../04-architecture.md`](../04-architecture.md).
 
 ## Troballa col·lateral: l'avís de temps violent té una **tercera** forma
 
 Fora de l'abast del parser, però la captura n'és la primera evidència en viu i afecta
-`models.py`. El §6 documenta dues formes (l'avís amb `evolucions` i el preavís pla); l'avís
+`models.py`. El §6 en documentava dues (l'avís amb `evolucions` i el preavís pla); l'avís
 de temps violent en fa servir una tercera: **`afectacions` penja directament de l'avís**, sense
 `evolucions` ni `periodes`, coherent amb el fet que la seva vigència són 2 h des de
 `dataEmisio` i no una franja de 6 h.
@@ -90,11 +91,13 @@ de temps violent en fa servir una tercera: **`afectacions` penja directament de 
 
 Nota també que `representatiu` arriba com a **cadena** (`"1"`), no com a float.
 
-Efecte mesurat: `parse_snapshot()` sí que reconeix l'episodi i el tipus, però com que
-`_parse_avis()` només llegeix `evolucions`, l'avís queda amb `evolucions=()` i
-**`perill_maxim == 0`**. És a dir, un avís de temps violent **grau 6 vigent** sobre la Cerdanya
-i el Ripollès arriba al model buit de contingut. El parser el lliura sencer (hi ha un test que
-ho fixa a `tests/test_parser.py`); qui l'ha de saber llegir és `models.py`.
+Efecte mesurat **el dia de la captura**: `parse_snapshot()` reconeixia l'episodi i el
+tipus, però com que `_parse_avis()` només llegia `evolucions`, l'avís quedava amb
+`evolucions=()` i **`perill_maxim == 0`**: un avís de temps violent **grau 6 vigent** sobre
+la Cerdanya i el Ripollès arribava al model buit de contingut. El parser ja el lliurava
+sencer (test a `tests/test_parser.py`). `models.py` ja llegeix aquesta forma; la regla i
+l'estat vigents són al trap 12 del §6 de
+[`../01-data-sources.md`](../01-data-sources.md).
 
 ## Reproducció
 

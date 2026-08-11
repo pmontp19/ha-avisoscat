@@ -68,7 +68,8 @@ tolerant. Cap import de HA.
 - [ ] `parse_snapshot()` no llança mai amb entrada malformada: retorna un snapshot buit
 
 > El trap 12 de `01-data-sources.md` §6 es va documentar **després** de tancar aquesta
-> tasca i per tant no forma part d'aquests criteris: el tanca una tasca futura pròpia.
+> tasca i per tant no forma part d'aquests criteris: es va tancar més tard a `models.py`
+> (`Avis.afectacions_directes` i `Avis.totes_afectacions`).
 
 **Verificació:** `pytest tests/test_models.py`. **Dependències:** T1. **Mida:** M
 
