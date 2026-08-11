@@ -34,7 +34,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .conftest import make_config_entry
+from .conftest import FakeSource, make_config_entry
 
 FIXTURE = Path(__file__).parent / "fixtures" / "comarquesAmbMar.json"
 
@@ -489,8 +489,15 @@ async def test_validate_api_key_outcomes(
 # ---------------------------------------------------------------------------
 
 
-async def test_created_entry_loads(hass: HomeAssistant) -> None:
-    """A config entry produced by the flow sets up and tears down cleanly."""
+async def test_created_entry_loads(
+    hass: HomeAssistant, quiet_source: FakeSource
+) -> None:
+    """A config entry produced by the flow sets up and tears down cleanly.
+
+    `quiet_source` keeps the coordinator's first refresh off the network: this
+    test is about the flow-to-setup wiring, not the SMP fetch (which is covered
+    by `tests/test_smp.py`), so `build_source` is patched to a quiet fake.
+    """
     with aioresponses() as mocked:
         mocked.get(
             "https://static-m.meteo.cat/assets-w3/json/topojson/comarquesAmbMar.json",

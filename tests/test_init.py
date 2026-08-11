@@ -9,10 +9,12 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
-from .conftest import FakeClock, make_config_entry
+from .conftest import FakeClock, FakeSource, make_config_entry
 
 
-async def test_setup_and_unload_entry(hass: HomeAssistant) -> None:
+async def test_setup_and_unload_entry(
+    hass: HomeAssistant, quiet_source: FakeSource
+) -> None:
     """A config entry loads and unloads cleanly."""
     entry = make_config_entry()
     entry.add_to_hass(hass)
@@ -26,7 +28,9 @@ async def test_setup_and_unload_entry(hass: HomeAssistant) -> None:
     assert entry.state is ConfigEntryState.NOT_LOADED
 
 
-async def test_two_comarques_load_at_the_same_time(hass: HomeAssistant) -> None:
+async def test_two_comarques_load_at_the_same_time(
+    hass: HomeAssistant, quiet_source: FakeSource
+) -> None:
     """Multi-entry by design: one config entry per comarca, both loaded.
 
     `single_config_entry` is enforced by the config flow, not by setup, so

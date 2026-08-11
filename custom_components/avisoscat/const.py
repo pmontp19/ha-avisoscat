@@ -104,6 +104,26 @@ CONF_SEVERE_THRESHOLD = "severe_threshold"
 CONF_INCLUDE_SEA = "include_sea"
 CONF_SCAN_INTERVAL = "scan_interval"
 
+# ---------------------------------------------------------------------------
+# Bus event types (docs/03-feature-spec.md §4)
+#
+# Fired on `hass.bus` for `trigger: event` automations. Each covers one of the
+# two horizons of §1.1: `*_announced` is the planning signal (hours to days),
+# `*_started`/`_upgraded`/`_downgraded`/`_cleared` are the in-force signals, and
+# `*_violent_weather` is the only genuinely real-time one. The schemas live in
+# `coordinator.py`'s payload builders; this module only names the types.
+#
+# `avisoscat_service_degraded` is part of the same contract but its firing
+# (persistent failure threshold) is a later task, so it is not declared here yet.
+# ---------------------------------------------------------------------------
+
+EVENT_WARNING_ANNOUNCED = f"{DOMAIN}_warning_announced"
+EVENT_WARNING_STARTED = f"{DOMAIN}_warning_started"
+EVENT_WARNING_UPGRADED = f"{DOMAIN}_warning_upgraded"
+EVENT_WARNING_DOWNGRADED = f"{DOMAIN}_warning_downgraded"
+EVENT_WARNING_CLEARED = f"{DOMAIN}_warning_cleared"
+EVENT_VIOLENT_WEATHER = f"{DOMAIN}_violent_weather"
+
 # Danger grade (0-6) at or above which `binary_sensor.severe_warning` turns on.
 # 3 is the official "Alt" band (docs/03-feature-spec.md §2).
 DEFAULT_SEVERE_THRESHOLD = 3
