@@ -832,7 +832,56 @@ def test_trap_12_violent_weather_afectacions_hang_directly_off_the_avis() -> Non
     # direct affectation too: comarca 15 must be reachable without knowing which
     # of the two shapes this avis happens to use.
     assert avis.totes_afectacions == (direct,)
+    assert avis.perill_declarat == 6
     assert avis.perill_maxim == 6
+
+
+@pytest.mark.parametrize(
+    "afectacions",
+    [
+        pytest.param(None, id="null_afectacions"),
+        pytest.param([], id="empty_afectacions"),
+        pytest.param(["not an object"], id="unusable_afectacions"),
+    ],
+)
+def test_trap_12_the_avis_grade_survives_losing_its_afectacions(
+    afectacions: object,
+) -> None:
+    """A grade-6 vigilance avis still reads as 6 when its affectations are gone.
+
+    The same avis states `perill: 6.0` on itself, so an `afectacions` that
+    arrives `null` (the legitimate empty shape of trap #3), empty, or holding
+    nothing usable must not take the grade down with it. Reading only the
+    affectations is the silent-zero failure of trap #12 by another route.
+    """
+    raw_avis = {
+        "tipus": "Avís Vigilància per Temps Violent",
+        "perill": 6.0,
+        "dataEmisio": "2026-08-06T12:43Z",
+        "estat": "Vigent",
+        "afectacions": afectacions,
+    }
+    snapshot = parse_snapshot([_episodi(avisos=[raw_avis])])
+
+    avis = snapshot.episodis[0].avisos[0]
+    assert avis.totes_afectacions == ()
+    assert avis.perill_declarat == 6
+    assert avis.perill_maxim == 6
+
+
+def test_an_ordinary_avis_declares_no_grade_of_its_own() -> None:
+    """The ordinary shape sends no avis-level `perill`, and 0 must not win.
+
+    Every rain and wind avis of both real captures leaves `perill` out, so the
+    absent-grade default has to lose to the affectations, never mask them.
+    """
+    snapshot = parse_snapshot(
+        [_with_periodes({"nom": "12-18", "afectacions": [_afectacio(perill=4.0)]})]
+    )
+
+    avis = snapshot.episodis[0].avisos[0]
+    assert avis.perill_declarat == 0
+    assert avis.perill_maxim == 4
 
 
 def test_trap_12_direct_afectacions_combine_with_evolucions_afectacions() -> None:
@@ -940,7 +989,12 @@ def test_payload_hash_never_raises_on_input_parse_snapshot_tolerates(
 def test_payload_hash_falls_back_to_a_constant_when_nothing_is_representable(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Even a value that cannot be turned into text at all produces a digest."""
+    """Even a value that cannot be turned into text at all produces a digest.
+
+    The fixed digest only makes two unusable payloads compare equal to each
+    other: coming from a usable one it still reads as a change, so a caller must
+    not read "the digest moved" as "the payload is usable".
+    """
 
     class Unrepresentable:
         def __repr__(self) -> str:
@@ -950,7 +1004,9 @@ def test_payload_hash_falls_back_to_a_constant_when_nothing_is_representable(
         digest = compute_payload_hash([Unrepresentable()])
 
     assert len(digest) == 64
-    assert "reporting it as unchanged" in caplog.text
+    assert "using a fixed digest for it" in caplog.text
+    assert digest == compute_payload_hash([Unrepresentable()])
+    assert digest != compute_payload_hash([_with_periodes()])
 
 
 def test_payload_hash_survives_a_lone_surrogate_in_the_fallback_text() -> None:

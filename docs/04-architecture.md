@@ -119,8 +119,12 @@ El client `smp.py` (encara no construït) és qui l'ha de cridar sobre el payloa
 posterior de payloads crus: aquesta és la porta insensible a l'ordre. El `payload_hash`
 que es passa a `parse_snapshot()` és el mateix valor, desat a l'snapshot per poder-lo
 comparar al cicle següent. Com a segona barrera, el parser també desa les afectacions en
-ordre canònic (§4), de manera que la igualtat d'snapshots per valor tampoc no depèn de
-l'ordre que hagi tingut el feed.
+ordre canònic (§4), de manera que la igualtat d'snapshots per valor no depèn de l'ordre en
+què hagin arribat **les afectacions** (l'única llista que el feed està documentat que
+rota). L'abast acaba aquí: `Avis.evolucions` és una tuple que compara per posició i no
+s'ordena canònicament, per tant una rotació d'`evolucions` sí que faria diferir dos
+snapshots de contingut idèntic. La porta insensible a l'ordre en general és el hash, no la
+comparació d'snapshots.
 
 ### `PublicPageSource`
 
@@ -235,6 +239,7 @@ class Avis:
     evolucions: tuple[Evolucio, ...]
     # Només l'avís de temps violent: penja les afectacions de l'avís (trap 12)
     afectacions_directes: tuple[Afectacio, ...] = ()
+    perill_declarat: int = 0  # el grau que l'avís declara sobre si mateix; 0 = no enviat
 
     @property
     def totes_afectacions(self) -> tuple[Afectacio, ...]:
@@ -290,6 +295,11 @@ Decisions del model que no es llegeixen del sketch:
   `totes_afectacions` és el que han de llegir els consumidors: cadascun dels dos camps
   és buit en la forma d'avís de l'altre, i llegir-ne només un torna «cap perill» en
   silenci precisament en l'avís més urgent.
+- `Avis.perill_declarat` desa el grau que l'avís de temps violent declara sobre l'objecte
+  de l'avís (el `perill: 6.0` de l'exemple del §6 de
+  [`01-data-sources.md`](01-data-sources.md)). `perill_maxim` és el màxim de les tres
+  fonts: si les `afectacions` d'aquell avís arriben `null` (trap 3) o cap entrada no és
+  usable, el grau declarat és l'única cosa que evita tornar a llegir 0 en un avís vigent.
 - `parse_snapshot()` **no llança mai**: entrada malformada → snapshot buit i un
   warning. Cada entrada (episodi, avís, evolució, franja, afectació) se salta
   individualment, de manera que un membre malformat no descarti els veïns sans.

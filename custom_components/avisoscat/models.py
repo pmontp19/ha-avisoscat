@@ -37,6 +37,10 @@ direction of more tolerance:
   directly off the avis, with no `evolucions`/`periodes` wrapper (trap #12).
   `Avis.totes_afectacions` is the aggregator to read; the two raw fields are
   each half of the picture and reading one alone silently drops the other shape.
+- `Avis` also keeps the grade that same shape states on the avis object itself,
+  as `perill_declarat`, because affectations can go missing (`null`, trap #3)
+  while the declared grade is right there. `perill_maxim` is the max of every
+  source; no single one of them is safe to read as "the grade".
 - `compute_payload_hash()` exists because the feed rotates `afectacions`
   between requests even when nothing changed (docs/01-data-sources.md §6,
   trap #12's companion note at §3.1): a hash of the raw payload must
@@ -427,6 +431,11 @@ class Avis:
     # says "directes" on purpose: unlike `Evolucio.afectacions`, this is *not* an
     # aggregate. Read `totes_afectacions` unless you specifically want this shape.
     afectacions_directes: tuple[Afectacio, ...] = ()
+    # The grade the avis states on itself, beside `afectacions_directes`: the
+    # "temps violent" shape sends it, the ordinary one does not. 0 therefore means
+    # "not sent", not "no danger", which is why it feeds `perill_maxim` and is
+    # never a grade to read on its own.
+    perill_declarat: int = 0
 
     @property
     def is_open(self) -> bool:
@@ -450,13 +459,19 @@ class Avis:
 
     @property
     def perill_maxim(self) -> int:
-        """Highest grade across every affectation of this emission.
+        """Highest grade this emission carries, from every source that states one.
 
-        Reads the aggregate, so the grade of an affectation carried directly on
-        the avis counts too (trap #12): without it, a "temps violent" vigilance
-        avis has no `evolucions` at all and its real grade would read as 0.
+        Every source, because each one alone can be empty on a warning that is
+        very much in force (trap #12). A "temps violent" vigilance avis has no
+        `evolucions`, so the aggregate covers its direct affectations; and its
+        `afectacions` may in turn arrive as `null` (trap #3) or hold nothing
+        usable, so `perill_declarat` covers the grade it states on itself. Read
+        any one of them alone and a grade-6 nowcast reads as no danger.
         """
-        return max((af.perill for af in self.totes_afectacions), default=0)
+        return max(
+            self.perill_declarat,
+            max((af.perill for af in self.totes_afectacions), default=0),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -514,8 +529,10 @@ class SmpSnapshot:
     episodis: tuple[Episodi, ...] = ()
     preavisos: tuple[Preavis, ...] = ()
     fetched_at: datetime | None = None
-    # Cheap stand-in for the `Last-Modified` the source does not send: lets the
-    # coordinator skip reprocessing when nothing changed.
+    # Stand-in for the `Last-Modified` the source does not send: lets the
+    # coordinator skip the downstream projection and the state writes when nothing
+    # changed. Computing it is not cheaper than parsing (docs/04-architecture.md
+    # §3); what it saves is the work after the parse.
     payload_hash: str | None = None
 
     @property
@@ -660,6 +677,9 @@ def _parse_avis(raw: Any) -> Avis | None:
                 _as_list(raw.get("afectacions"), "afectacions"), _parse_afectacio
             )
         ),
+        # Same avis states its own grade beside them, like the flat pre-warning
+        # shape does. Read so that losing the affectations cannot lose the grade.
+        perill_declarat=_as_int(raw.get("perill"), default=0),
     )
 
 
@@ -766,8 +786,10 @@ def _hash_source(raw: Any) -> str:
     1. the canonical JSON, which ignores the feed's unstable list order;
     2. the uncanonicalised `repr`, which still identifies the content and at worst
        reports a change the feed's list rotation invented: one needless reprocess;
-    3. a constant, which reads as "unchanged" and so keeps the caller's last good
-       state, the documented behaviour for a payload we cannot use anyway.
+    3. a constant, which only makes two consecutive unusable payloads compare
+       equal to each other. The first unusable payload after a usable one still
+       reads as a change, so a differing digest is never evidence that the
+       payload behind it can be used.
     """
     try:
         return json.dumps(_canonicalize_for_hash(raw), sort_keys=True, default=str)
@@ -782,7 +804,7 @@ def _hash_source(raw: Any) -> str:
     except Exception as err:
         _LOGGER.warning(
             "Could not even represent the SMP payload for hashing, "
-            "reporting it as unchanged: %s",
+            "using a fixed digest for it: %s",
             err,
         )
     return _UNHASHABLE_PAYLOAD
