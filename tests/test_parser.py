@@ -192,19 +192,28 @@ def test_the_real_page_feeds_parse_snapshot_unchanged(real_page: str) -> None:
     assert None not in meteors
 
     # Osona (24) was under a rain warning at capture time, at a real grade.
+    # Enumerated through `Avis.totes_afectacions`, not `avis.evolucions`: the
+    # violent-weather nowcast in this same capture hangs its five affectations
+    # directly off the avis, so walking `evolucions` alone drops them.
     osona = [
         af
         for ep in snapshot.episodis
         for avis in ep.avisos
-        for ev in avis.evolucions
-        for af in ev.afectacions
+        for af in avis.totes_afectacions
         if af.id_comarca == 24
     ]
     assert osona
     assert max(af.perill for af in osona) >= 1
 
     violent = next(ep for ep in snapshot.episodis if ep.meteor is Meteor.TEMPS_VIOLENT)
-    assert violent.avisos[0].tipus is TipusAvis.TEMPS_VIOLENT
+    violent_avis = violent.avisos[0]
+    assert violent_avis.tipus is TipusAvis.TEMPS_VIOLENT
+    # The five affectations the raw payload carries on the avis itself survive
+    # parsing, and its real grade is not read as "no danger".
+    assert violent_avis.evolucions == ()
+    assert len(violent_avis.afectacions_directes) == 5
+    assert violent_avis.totes_afectacions == violent_avis.afectacions_directes
+    assert violent_avis.perill_maxim >= 1
 
 
 # ---------------------------------------------------------------------------

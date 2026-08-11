@@ -299,7 +299,11 @@ Dues mesures més d'aquella captura:
 - La pàgina del radar envia `cache-control: max-age=180`, no 600.
 - ⚠️ **L'ordre de `afectacions` no és estable entre peticions**: amb dades SMP idèntiques, la
   llista d'una franja pot sortir rotada. Qualsevol `payload_hash` o comparació d'snapshots ha
-  de ser insensible a l'ordre, o detectarà un canvi a cada cicle.
+  de ser insensible a l'ordre, o detectarà un canvi a cada cicle. **Tancat per les dues
+  bandes**: `models.compute_payload_hash()` canonicalitza l'ordre de les llistes abans del
+  hash, i el parser desa les afectacions (tant les de cada franja com les
+  `afectacions_directes` de l'avís) en un ordre canònic propi, de manera que dos snapshots
+  amb el mateix contingut comparen iguals per valor (§3 de [`04-architecture.md`](04-architecture.md)).
 
 ### 3.2 Extracció
 
@@ -489,7 +493,7 @@ ho cobreix, perquè la conversió passa per `float()`.
 | 9 | El literal del tipus té variants històriques (`"Avís d'Observació"`, `"Avís temps violent"`) | Normalitzar amb prefixos/`casefold`, mai igualtat estricta |
 | 10 | `comentari`, `llindar*`, `meteor.nom`, `descripcio` (CECAT) són **text extern no fiable** | Mai `allow_html`, mai interpolació HTML directa (regla de `CLAUDE.md`) |
 | 11 | `fasedatahora` del CECAT és `DD/MM/YYYY HH:MM` local, no ISO | Parseig explícit tolerant; `None` si falla |
-| 12 | L'avís de **temps violent** porta `afectacions` **penjant directament de l'avís** (`avis["afectacions"]`), sense `evolucions` ni `periodes` | `Avis` té un camp `afectacions` propi i `_parse_avis()` el llegeix a més de `evolucions`; `Avis.perill_maxim` combina totes dues fonts, de manera que un `Avís Vigilància per Temps Violent` de **grau 6 vigent** ja llegeix `perill_maxim == 6`, no 0. Cobert per `test_trap_12_violent_weather_afectacions_hang_directly_off_the_avis` a `tests/test_models.py`. Tractar-ho com una franja única de 2 h des de `dataEmisio` és feina de `vigencia.py` (§5), encara pendent |
+| 12 | L'avís de **temps violent** porta `afectacions` **penjant directament de l'avís** (`avis["afectacions"]`), sense `evolucions` ni `periodes` | `Avis` té el camp `afectacions_directes` i `_parse_avis()` el llegeix a més de `evolucions`. **Els consumidors han de llegir l'agregador `Avis.totes_afectacions`**, mai un dels dos camps sol: `afectacions_directes` és buit en un avís ordinari i `Evolucio.afectacions` és buit en un de temps violent, de manera que llegir-ne només un torna a donar «cap perill» en silenci. `Avis.perill_maxim` llegeix l'agregador, així que un `Avís Vigilància per Temps Violent` de **grau 6 vigent** ja llegeix `perill_maxim == 6`, no 0. Cobert per `test_trap_12_violent_weather_afectacions_hang_directly_off_the_avis` a `tests/test_models.py`. Tractar-ho com una franja única de 2 h des de `dataEmisio` és feina de `vigencia.py` (§5), encara pendent |
 
 Aquesta és la mateixa disciplina que
 [`ha-incendiscat`](https://github.com/pmontp19/ha-incendiscat/blob/main/docs/04-architecture.md)
