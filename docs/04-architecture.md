@@ -114,7 +114,7 @@ No llança mai, igual que `parse_snapshot()`: si no pot canonicalitzar el payloa
 imbricament que exhaureix el límit de recursió, per exemple) avisa i degrada a un digest
 de la forma crua, perquè un payload il·legible no pot tombar l'actualització.
 
-El client `smp.py` (encara no construït) és qui l'ha de cridar sobre el payload cru, i
+El client `smp.py` és qui l'ha de cridar sobre el payload cru, i
 **el que ha de decidir si es reprocessa és la igualtat d'aquest hash**, no una comparació
 posterior de payloads crus: aquesta és la porta insensible a l'ordre. El `payload_hash`
 que es passa a `parse_snapshot()` és el mateix valor, desat a l'snapshot per poder-lo
