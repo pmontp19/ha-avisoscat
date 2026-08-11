@@ -5,9 +5,16 @@ testable in complete isolation (docs/04-architecture.md §4). It takes already
 decoded JSON and returns typed objects. No network, no I/O, no HTML.
 
 The keyless `meteo.cat` inline payload is not an official API, so every field is
-read with `.get()` plus a default and every conversion is tolerant. The twelve
-tolerance traps of docs/01-data-sources.md §6 are implemented here; each one has
-a dedicated test in `tests/test_models.py`.
+read with `.get()` plus a default and every conversion is tolerant. What this
+module implements from docs/01-data-sources.md §6 is the reading of that payload:
+status literals, float numbers, `null` collections, repeated emissions,
+unrecognised text kept verbatim, JSON-supplied band keys and the three avis
+shapes. Each trap implemented here has a `test_trap_*` test in
+`tests/test_models.py`. Not every trap of §6 belongs to this module: trap 7's
+readable comarca fallback lives in `comarques.py`, trap 10's "no HTML" rule
+applies where the text is rendered, and trap 11 is the CECAT `fasedatahora`
+format, which this integration does not read at all (its test only pins that such
+a timestamp becomes `None` instead of raising).
 
 Two traps are worth repeating because getting them wrong fails silently:
 
