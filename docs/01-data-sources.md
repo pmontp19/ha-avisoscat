@@ -301,7 +301,7 @@ Dues mesures més d'aquella captura:
   llista d'una franja pot sortir rotada. Qualsevol `payload_hash` o comparació d'snapshots ha
   de ser insensible a l'ordre, o detectarà un canvi a cada cicle. **Tancat per les dues
   bandes**: `models.compute_payload_hash()` canonicalitza l'ordre de les llistes abans del
-  hash, i el parser desa les afectacions (tant les de cada franja com les
+  hash, i `models.parse_snapshot()` desa les afectacions (tant les de cada franja com les
   `afectacions_directes` de l'avís) en un ordre canònic propi, de manera que dos snapshots
   amb el mateix contingut comparen iguals per valor (§3 de [`04-architecture.md`](04-architecture.md)).
 

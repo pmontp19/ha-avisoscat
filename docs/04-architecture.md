@@ -118,12 +118,12 @@ El client `smp.py` (encara no construït) és qui l'ha de cridar sobre el payloa
 **el que ha de decidir si es reprocessa és la igualtat d'aquest hash**, no una comparació
 posterior de payloads crus: aquesta és la porta insensible a l'ordre. El `payload_hash`
 que es passa a `parse_snapshot()` és el mateix valor, desat a l'snapshot per poder-lo
-comparar al cicle següent. Com a segona barrera, el parser també desa les afectacions en
-ordre canònic (§4), de manera que la igualtat d'snapshots per valor no depèn de l'ordre en
-què hagin arribat **les afectacions** (l'única llista que el feed està documentat que
-rota). L'abast acaba aquí: `Avis.evolucions` és una tuple que compara per posició i no
-s'ordena canònicament, per tant una rotació d'`evolucions` sí que faria diferir dos
-snapshots de contingut idèntic. La porta insensible a l'ordre en general és el hash, no la
+comparar al cicle següent. Com a segona barrera, `parse_snapshot()` també desa les
+afectacions en ordre canònic (§4), de manera que la igualtat d'snapshots per valor no
+depèn de l'ordre en què hagin arribat **les afectacions** (l'única llista que el feed està
+documentat que rota). L'abast acaba aquí: `Avis.evolucions` és una tuple que compara per
+posició i no s'ordena canònicament, per tant una rotació d'`evolucions` sí que faria
+diferir dos snapshots de contingut idèntic. La porta insensible a l'ordre en general és el hash, no la
 comparació d'snapshots.
 
 ### `PublicPageSource`
@@ -239,7 +239,8 @@ class Avis:
     evolucions: tuple[Evolucio, ...]
     # Només l'avís de temps violent: penja les afectacions de l'avís (trap 12)
     afectacions_directes: tuple[Afectacio, ...] = ()
-    perill_declarat: int = 0  # el grau que l'avís declara sobre si mateix; 0 = no enviat
+    # El grau que l'avís declara sobre si mateix; 0 = no enviat, no "cap perill"
+    perill_declarat: int = 0
 
     @property
     def totes_afectacions(self) -> tuple[Afectacio, ...]:
@@ -288,8 +289,8 @@ Decisions del model que no es llegeixen del sketch:
 - Les col·leccions són tuples perquè els dataclasses congelats comparin per valor. És
   el que permetrà al coordinator comparar snapshots amb `always_update=False` (§7). Com
   que les tuples comparen per posició i el feed retorna les `afectacions` **rotades**
-  entre peticions (§3.1 de [`01-data-sources.md`](01-data-sources.md)), el parser les
-  desa en un **ordre canònic propi** (comarca, nivell, dia, grau, llindar, auxiliar) i
+  entre peticions (§3.1 de [`01-data-sources.md`](01-data-sources.md)), `parse_snapshot()`
+  les desa en un **ordre canònic propi** (comarca, nivell, dia, grau, llindar, auxiliar) i
   no en l'ordre del feed: altrament dos snapshots idèntics compararien diferent.
 - `Avis` porta `afectacions_directes` a més de `evolucions` (trap 12) i l'agregador
   `totes_afectacions` és el que han de llegir els consumidors: cadascun dels dos camps
