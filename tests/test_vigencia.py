@@ -612,6 +612,62 @@ def _temps_violent(
     )
 
 
+def _temps_violent_directes(
+    *,
+    data_emissio: str | None = "2026-08-05T11:30Z",
+    data_fi: str | None = "2026-08-05T23:59Z",
+    afectacions: list[dict] | None = None,
+) -> tuple[Episodi, ...]:
+    """A nowcast in the live trap-12 shape: affectations directly off the avis.
+
+    No `evolucions` key at all, the shape measured 2026-08-06: a band walk alone
+    finds nothing, so only the directes half of the union reaches the comarca.
+    """
+    payload = [
+        [
+            {
+                "id": None,
+                "estat": {"nom": "Obert", "data": None},
+                "meteor": {"idMeteor": None, "nom": "Temps violent"},
+                "avisos": [
+                    {
+                        "tipus": TEMPS_VIOLENT,
+                        "estat": "Vigent",
+                        "dataEmisio": data_emissio,
+                        "dataInici": data_emissio,
+                        "dataFi": data_fi,
+                        "afectacions": afectacions
+                        if afectacions is not None
+                        else [_afectacio(perill=6.0, nivell=2.0, dia=None)],
+                    }
+                ],
+            }
+        ]
+    ]
+    return parse_snapshot(payload).episodis
+
+
+def test_violent_weather_projects_against_the_live_directes_shape(
+    clock: FakeClock,
+) -> None:
+    """A real vigilance avis carries its affectations off the avis, not evolucions.
+
+    The live shape measured 2026-08-06 (trap #12) has `evolucions` empty and the
+    affectation in `afectacions_directes`. A band-only walk finds nothing for it,
+    so the violent dispatch must read the union: a grade-6 hail nowcast is then in
+    force for its two-hour window rather than silently reading as no danger.
+    """
+    episodis = _temps_violent_directes()
+
+    vigents = afectacions_vigents(episodis, OSONA, clock())  # 12:00, next band
+    assert len(vigents) == 1
+    afectacio = vigents[0]
+    assert afectacio.is_temps_violent
+    assert afectacio.perill == 6
+    assert afectacio.inici == datetime(2026, 8, 5, 11, 30, tzinfo=UTC)
+    assert afectacio.fi == afectacio.inici + FINESTRA_TEMPS_VIOLENT
+
+
 def test_violent_weather_is_in_force_for_two_hours_ignoring_bands(
     clock: FakeClock,
 ) -> None:

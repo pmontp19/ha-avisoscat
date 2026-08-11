@@ -515,6 +515,36 @@ def _afectacions_de_la_comarca(avis: Avis, id_comarca: int) -> Iterator[_Candida
                     yield _Candidat(index, evolucio, nom, afectacio)
 
 
+# The directes half of the violent union (trap #12) has no `Evolucio` to pair an
+# affectation with: a nowcast carries no forecast day, comentari, geographic
+# distribution or day-level threshold of its own, and its affectation states its
+# own threshold. This empty stand-in is what those candidates carry.
+_EVOLUCIO_BUIDA = Evolucio(
+    dia=None,
+    comentari="",
+    llindar_baix=None,
+    llindar_alt=None,
+    distribucio_geografica=None,
+    representatiu=None,
+)
+
+
+def _candidats_violents_de_la_comarca(
+    avis: Avis, id_comarca: int
+) -> Iterator[_Candidat]:
+    """Every affectation of a violent nowcast that names `id_comarca`.
+
+    A violent-weather vigilance avis hangs its affectations directly off the avis,
+    with no `evolucions`/`periodes` wrapper (trap #12), so both shapes are walked:
+    the union `Avis.totes_afectacions` represents. The forecast day is retained
+    where one exists; the directes half carries `_EVOLUCIO_BUIDA`.
+    """
+    yield from _afectacions_de_la_comarca(avis, id_comarca)
+    for afectacio in avis.afectacions_directes:
+        if afectacio.id_comarca == id_comarca:
+            yield _Candidat(0, _EVOLUCIO_BUIDA, "", afectacio)
+
+
 def _projecta_bandes(
     episodi: Episodi,
     avis: Avis,
@@ -766,11 +796,17 @@ def projeccions(
             if not avis.is_open:
                 continue
             presents.add(_identitat_avis(episodi, avis))
-            candidates = _afectacions_de_la_comarca(avis, id_comarca)
             resultat.extend(
-                _projecta_temps_violent(episodi, avis, candidates, now)
+                _projecta_temps_violent(
+                    episodi,
+                    avis,
+                    _candidats_violents_de_la_comarca(avis, id_comarca),
+                    now,
+                )
                 if avis.tipus is TipusAvis.TEMPS_VIOLENT
-                else _projecta_bandes(episodi, avis, candidates, now)
+                else _projecta_bandes(
+                    episodi, avis, _afectacions_de_la_comarca(avis, id_comarca), now
+                )
             )
     _purga_incidencies(presents)
     return sorted(_sense_duplicats(resultat), key=_ordre_cronologic)
