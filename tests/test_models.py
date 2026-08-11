@@ -11,7 +11,6 @@ prevent.
 
 import json
 import logging
-import subprocess
 import sys
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -33,6 +32,8 @@ from custom_components.avisoscat.models import (
     is_closed,
     parse_snapshot,
 )
+
+from .conftest import run_in_isolated_interpreter
 
 MODELS_SOURCE = Path(models.__file__)
 
@@ -145,19 +146,8 @@ def test_models_loads_in_an_interpreter_without_home_assistant() -> None:
     touching this process's `sys.modules`, and cannot be fooled by an already
     imported `homeassistant`: the child is asked what it ended up loading.
     """
-    try:
-        result = subprocess.run(
-            [sys.executable, "-I", "-c", _ISOLATION_SCRIPT, str(MODELS_SOURCE)],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as err:
-        pytest.fail(f"Could not run a child interpreter to load models.py: {err}")
+    report = run_in_isolated_interpreter(_ISOLATION_SCRIPT, str(MODELS_SOURCE))
 
-    assert result.returncode == 0, f"models.py failed to load:\n{result.stderr}"
-    report = json.loads(result.stdout)
     assert report["home_assistant"] == []
     # What loaded in isolation is the real module, not an empty shell.
     assert report["meteor"] == "vent"

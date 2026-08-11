@@ -1,5 +1,8 @@
 """Shared pytest fixtures for avisoscat tests."""
 
+import json
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,6 +15,31 @@ from custom_components.avisoscat.const import (
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 pytest_plugins = "pytest_homeassistant_custom_component"
+
+
+def run_in_isolated_interpreter(script: str, *args: str) -> dict:
+    """Run `script` in a fresh interpreter and return the JSON report it prints.
+
+    The pure layers (`models.py`, `vigencia.py`) must work in an interpreter that
+    never imports Home Assistant (docs/04-architecture.md §4 and §5). A child
+    interpreter proves it behaviourally without touching this process's
+    `sys.modules`, and cannot be fooled by an already imported `homeassistant`:
+    the child is asked what it actually ended up loading, and its report is
+    computed by really running the module.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", script, *args],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as err:
+        pytest.fail(f"Could not run a child interpreter: {err}")
+
+    assert result.returncode == 0, f"the module failed in isolation:\n{result.stderr}"
+    return json.loads(result.stdout)
 
 
 @pytest.fixture(autouse=True)

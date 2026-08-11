@@ -336,26 +336,179 @@ vigent) és al §6 d'aquell document.
 ## 5. Vigència (`vigencia.py`)
 
 El mòdul més important i el que ens diferencia. Un avís SMP **no** és vigent només perquè
-existeixi: cal creuar `dataInici`/`dataFi` amb la franja de 6 h UTC del moment actual.
+existeixi: cal creuar `dataInici`/`dataFi` amb la franja de 6 h UTC del moment actual. I en
+surten **dos horitzons, no un** (§1.1 de [`03-feature-spec.md`](03-feature-spec.md)): dues
+projeccions del mateix snapshot separades només pel rellotge.
 
 ```python
 PERIODES = {"00-06": (0, 6), "06-12": (6, 12), "12-18": (12, 18), "18-00": (18, 24)}
+FINESTRA_TEMPS_VIOLENT = timedelta(hours=2)
+DIES_OUTLOOK = 3
+
+
+class Horitzo(StrEnum):
+    VIGENT = "vigent"  # la franja afectada conté aquest instant
+    ANUNCIAT = "anunciat"  # emès, la franja encara no ha començat
+    PASSAT = "passat"  # la franja ja ha acabat
+
+
+@dataclass(frozen=True, slots=True)
+class AfectacioProjectada:
+    """Una afectació d'una comarca situada sobre el rellotge."""
+
+    horitzo: Horitzo
+    id_comarca: int
+    meteor: Meteor | None
+    meteor_nom: str
+    tipus: TipusAvis | None
+    tipus_nom: str
+    perill: int  # 0-6
+    nivell: int  # 1 = llindar baix, 2 = llindar alt
+    llindar: str
+    auxiliar: bool
+    dia: date
+    periode: str  # nom canònic de franja
+    inici: datetime  # inici de franja retallat per `dataInici`
+    fi: datetime  # fi de franja retallat per `dataFi`, exclusiu
+    dies_per_endavant: int
+    hores_per_endavant: int
+    comentari: str
+    distribucio_geografica: str | None
+    data_emissio: datetime | None
+    data_inici: datetime | None
+    data_fi: datetime | None
 
 
 def periode_actual(now_utc: datetime) -> str: ...
+def periode_bounds(dia: date, periode: str) -> tuple[datetime, datetime] | None: ...
 
 
-def afectacions_vigents(
-    episodis: Iterable[Episodi], id_comarca: int, now_utc: datetime
-) -> list[AfectacioVigent]:
+# El recorregut únic del qual es filtren els dos horitzons i la graella.
+# `Sequence` i no `Iterable`: cada punt d'entrada que es pot cridar més d'una
+# vegada amb el mateix argument el torna a recórrer, i un generador d'un sol ús
+# respondria "res" la segona vegada.
+def projeccions(
+    episodis: Sequence[Episodi], id_comarca: int, now_utc: datetime
+) -> list[AfectacioProjectada]: ...
+
+
+def afectacions_vigents(...) -> list[AfectacioProjectada]:
     """Afectacions que apliquen a `id_comarca` en aquest instant."""
+
+
+def afectacions_anunciades(...) -> list[AfectacioProjectada]:
+    """Afectacions emeses per a `id_comarca` que encara no són vigents."""
+
+
+def outlook(..., *, dies: int = DIES_OUTLOOK) -> list[OutlookDia]:
+    """Graella dia × franja: sempre 4 franges per dia, amb 0 on no hi ha res."""
+
+
+def preavisos_actius(
+    preavisos: Iterable[Preavis], now_utc: datetime
+) -> list[Preavis]: ...
 ```
 
-Un `AfectacioVigent` porta el meteor, el grau, el llindar, la franja, l'avís d'origen i el
-`data_fi` efectiu (mínim entre el final de la franja i el `dataFi` de l'avís).
+Els **Avisos de Vigilància per Temps Violent** són un cas a part, no una franja doblegada:
+valen 2 h des de `dataEmisio`, ignoren la franja on el payload els llista i **mai** són
+anunciats (quan existeixen ja són vigents; una emissió amb data futura no informa res). Les
+franges on apareixen es col·lapsen en una sola projecció, la més greu, perquè un nowcast
+repetit a dues franges no compti com dos avisos vigents.
 
-Els **Avisos de Vigilància per Temps Violent** no segueixen franges: valen 2 h des de
-`dataEmisio`, i `vigencia.py` els tracta com un cas a part.
+La finestra de 2 h **es retalla pel `dataFi` de l'avís només quan aquest fi la limita de
+debò**, és a dir quan és posterior a l'emissió: és el mateix `min()` que `_interval_efectiu`
+aplica a tots els altres tipus, perquè una projecció amb un `fi` que sobrevisqui el `data_fi`
+que ella mateixa porta es contradiu, i dir que hi ha pedra vigent 90 minuts després que
+l'SMC l'hagi donat per acabada és el mateix error que un zero silenciós, en l'altre sentit.
+
+Un `dataFi` absent, o igual o anterior a l'emissió, **no és utilitzable com a límit**: es
+mantenen les 2 h senceres i la forma es reporta un cop (warning el primer cop per emissió,
+debug després). Un nowcast que desapareix és pitjor que un que s'allarga: allargar-se fa que
+algú miri el cel i no vegi res, desaparèixer fa que un avís de pedra de grau màxim es llegeixi
+com a cap perill, i les 2 h des de l'emissió són un criteri d'acceptació. En tots dos casos el
+`fi` de la projecció i el seu `data_fi` són coherents.
+
+⚠️ **No verificat amb dades reals**: no hi ha cap payload de temps violent capturat a
+[`captures/`](captures/), així que què porta realment el `dataFi` d'un nowcast és una
+suposició (el `tests/fixtures/smp_temps_violent_sample.json` que llista §1 encara no
+existeix). Cal capturar a [`captures/`](captures/) el primer temps violent real que s'observi
+i tornar a comprovar-hi **les dues branques**.
+
+⚠️ **Excepció deliberada al dia relatiu, no la "corregeixis" tornant a l'aritmètica plana**:
+mentre la finestra de 2 h és oberta, el `dia` d'un nowcast és **el dia en què es llegeix**
+(`now.date()`), no el de l'emissió. Una emissió a les 23:30 llegida a les 00:30 encara és
+vigent: `(inici.date() - now.date()).days` valdria `-1` i `etiqueta_dia` retornaria `"-1"`,
+fora de l'enumeració `avui`/`dema`/`dema_passat` que els events porten (§4.1 de
+[`03-feature-spec.md`](03-feature-spec.md)), i una etiqueta que mira endavant no ha volgut
+dir mai res per a un avís que mai no és anunciat. Una finestra ja tancada conserva el dia en
+què es va emetre. `outlook()` no canvia: reparteix per solapament d'interval i ja situa bé la
+finestra a les dues cel·les.
+
+Onze decisions que no es llegeixen del sketch:
+
+- **Un sol `AfectacioProjectada`** en lloc d'un `AfectacioVigent`: una afectació vigent i
+  una anunciada porten exactament la mateixa càrrega i només difereixen del costat del
+  rellotge on cauen. Una classe que es digués "vigent" i contingués una afectació anunciada
+  mentiria; el camp `horitzo` ho diu sense ambigüitat.
+- **`Horitzo.PASSAT`** existeix perquè `outlook()` pugui informar del grau d'una franja
+  d'avui que ja ha passat. Cap dels dos horitzons de cap el retorna mai.
+- **L'interval efectiu és la franja retallada** per `dataInici`/`dataFi`: un avís que acaba
+  a mitja franja deixa de ser vigent al seu `dataFi`, no al final de la franja. Si el retall
+  queda buit, la franja simplement no s'informa (la font continua enviant-la).
+- **`fi` és exclusiu**: la franja `18-00` va de les 18:00 a la mitjanit següent, i és per
+  això que les 23:59:59 encara compten.
+- **Tot en UTC**, i `now_utc` es normalitza a l'entrada (naïf → UTC, *aware* → convertit),
+  perquè l'hora oficial (UTC+1 a l'hivern, UTC+2 a l'estiu) no es pugui filtrar dins
+  l'aritmètica de franges. Hi ha un test d'hivern i un d'estiu que ho demostren.
+- **Els noms de franja es parsegen, no es busquen**: el `"18-24"` de la documentació escrita
+  de l'SMC resol igual que el `"18-00"` del JSON i tots dos es normalitzen a `"18-00"`. Un
+  nom que no es pugui situar en el temps es descarta, mai s'endevina: la coerció "l'hora 0
+  vol dir final del dia" només val si l'hora d'inici és més gran que 0, perquè un `"0-0"` no
+  situa res i llegir-lo com un dia sencer seria precisament endevinar. El descart es registra
+  a **debug**, no a warning: aquest recorregut es repeteix cada minut i per cada entrada de
+  configuració, així que un sol camp malformat repetiria la mateixa línia ~1440 vegades al
+  dia. El report a nivell de payload és de `models.py`, un cop per fetch. Igual per a una
+  afectació sense cap dia i per a un nowcast sense hora d'emissió.
+- **Un dia il·legible es deriva per posició, amb guarda**: si ni l'afectació ni la seva
+  evolució tenen un `dia` parsejable (p. ex. la font canvia de format de data i `models.py`
+  els rebutja tots alhora), el dia surt de `dataInici.date()` **més l'índex de l'evolució**
+  dins l'avís. És una inferència estructurada, no un fet de la font: el que la sosté és que
+  [`captures/smp-episodis-oberts-2026-08-05.json`](captures/smp-episodis-oberts-2026-08-05.json)
+  porta les evolucions en ordre cronològic diari començant exactament a la data del
+  `dataInici` (2026-08-04, 2026-08-05, 2026-08-06 amb `dataInici` 2026-08-04T12:00). Com que
+  l'evidència és una sola captura, la inferència es **comprova**: si els dies derivats
+  passarien del `dataFi` de l'avís o de l'horitzó de 3 dies de l'SMP, s'ha trencat la
+  suposició → es reporta (amb el **meteor** identificat, perquè el `tipus_nom` és el mateix
+  literal `Avís` per a tots i no diria quin s'ha trencat) i tots els dies cauen al
+  `dataInici.date()` pla, i llavors **`_pic_per_dia_i_franja` col·lapsa una sola projecció per
+  (dia, franja): la més greu**. Sense aquest col·lapse tres evolucions que només difereixen
+  en el `comentari` tornarien tres afectacions vigents per a una sola franja d'una sola
+  comarca, que és justament el recompte fals que la derivació evita. El desempat és
+  determinista (grau, després nivell, després un ordre canònic sobre la resta de camps) i
+  **mai per ordre d'arribada**: l'ordre de les afectacions dins el payload no és una propietat
+  que la font garanteixi entre peticions, i deixar-l'hi decidir faria ballar el grau informat
+  entre dos polls sense que la dada hagi canviat. Trap #12 de §6 de
+  [`01-data-sources.md`](01-data-sources.md).
+- **Els reports de tolerància es diuen un cop per emissió**: warning el primer cop, debug
+  després, perquè aquest recorregut és el recàlcul de cada minut i 1440 línies idèntiques al
+  dia per entrada de configuració amaguen el senyal en lloc d'aixecar-lo. La memòria es
+  guarda per `(motiu, (meteor, tipus, dataEmisio))` i `projeccions()` la retalla a les
+  emissions del snapshot que acaba de recórrer, la mateixa disciplina que la purga
+  d'`announced_seen` de §8: així no pot créixer més que el snapshot. Una emissió que
+  desapareix i torna es reporta un altre cop, i això és el comportament correcte.
+- **`projeccions()` desduplica projeccions idèntiques**: la mateixa franja de la mateixa
+  comarca, al mateix grau i al mateix interval, és una afectació encara que la font la digui
+  dues vegades; comptar-la dues vegades donaria un número fals a un sensor de recompte. És
+  només la xarxa de seguretat de tot arreu: qualsevol diferència en qualsevol camp, el grau
+  inclòs, es conserva, i el col·lapse més fort per (dia, franja) és exclusiu del fallback dels
+  dies derivats.
+- **No es filtra per grau**: un grau il·legible també val 0 (§4), així que descartar el 0
+  aquí perdria afectacions reals. El llindar de severitat és cosa de les entitats.
+- **`outlook()` reparteix per solapament d'interval**, no per nom de franja: així una
+  finestra de temps violent a cavall de les 18:00 apareix a les dues cel·les. I
+  `preavisos_actius()` no es parteix en dos horitzons: un preavís no té comarca ni franja i
+  el seu sentit és justament l'horitzó de 3 dies i més (§1.5 de
+  [`01-data-sources.md`](01-data-sources.md)).
 
 ⚠️ Com que la vigència depèn del rellotge, el coordinator **no** pot limitar-se a recalcular
 quan arriba dada nova. `__init__.py` registra un `async_track_time_change` cada minut que
@@ -412,8 +565,10 @@ Estat que manté:
 @dataclass
 class AvisoscatState:
     snapshot: SmpSnapshot | None
-    en_vigor: dict[Meteor, AfectacioVigent]  # actiu ARA
-    anunciats: dict[Meteor, AfectacioFutura]  # emès, encara no vigent
+    en_vigor: dict[Meteor, AfectacioProjectada]  # actiu ARA (horitzó VIGENT)
+    anunciats: dict[
+        Meteor, AfectacioProjectada
+    ]  # emès, encara no vigent (horitzó ANUNCIAT)
     outlook: dict[date, dict[str, int]]  # dia -> {franja: grau}, 3 dies
     preavis: Preavis | None
     temps_violent: TempsViolent | None
@@ -455,7 +610,7 @@ def _emit_announced(state, anunciats) -> None:
             fire(EVENT_WARNING_ANNOUNCED, payload_announced(af))
 
 
-def _emit_in_force(prev: dict[Meteor, AfectacioVigent], curr) -> None:
+def _emit_in_force(prev: dict[Meteor, AfectacioProjectada], curr) -> None:
     for meteor, af in curr.items():
         old = prev.get(meteor)
         if old is None:
