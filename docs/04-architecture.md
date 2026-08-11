@@ -565,8 +565,10 @@ Estat que manté:
 @dataclass
 class AvisoscatState:
     snapshot: SmpSnapshot | None
-    en_vigor: dict[Meteor, AfectacioVigent]  # actiu ARA
-    anunciats: dict[Meteor, AfectacioFutura]  # emès, encara no vigent
+    en_vigor: dict[Meteor, AfectacioProjectada]  # actiu ARA (horitzó VIGENT)
+    anunciats: dict[
+        Meteor, AfectacioProjectada
+    ]  # emès, encara no vigent (horitzó ANUNCIAT)
     outlook: dict[date, dict[str, int]]  # dia -> {franja: grau}, 3 dies
     preavis: Preavis | None
     temps_violent: TempsViolent | None
@@ -608,7 +610,7 @@ def _emit_announced(state, anunciats) -> None:
             fire(EVENT_WARNING_ANNOUNCED, payload_announced(af))
 
 
-def _emit_in_force(prev: dict[Meteor, AfectacioVigent], curr) -> None:
+def _emit_in_force(prev: dict[Meteor, AfectacioProjectada], curr) -> None:
     for meteor, af in curr.items():
         old = prev.get(meteor)
         if old is None:

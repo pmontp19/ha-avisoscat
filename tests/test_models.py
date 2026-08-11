@@ -11,6 +11,7 @@ prevent.
 
 import json
 import logging
+import sys
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
