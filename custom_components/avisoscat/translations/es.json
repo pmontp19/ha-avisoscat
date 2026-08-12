@@ -50,6 +50,67 @@
       "already_configured": "Esta comarca ya está configurada."
     }
   },
+  "entity": {
+    "sensor": {
+      "warning_level": {
+        "name": "Nivel de aviso",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "active_warnings": {
+        "name": "Avisos activos"
+      },
+      "announced_warning": {
+        "name": "Aviso anunciado",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "max_grade_today": {
+        "name": "Grado máximo hoy",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "max_grade_tomorrow": {
+        "name": "Grado máximo mañana",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "max_grade_day_after": {
+        "name": "Grado máximo pasado mañana",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "prewarning": {
+        "name": "Preaviso",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

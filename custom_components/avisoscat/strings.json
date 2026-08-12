@@ -50,6 +50,67 @@
       "already_configured": "This comarca is already configured."
     }
   },
+  "entity": {
+    "sensor": {
+      "warning_level": {
+        "name": "Warning level",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "active_warnings": {
+        "name": "Active warnings"
+      },
+      "announced_warning": {
+        "name": "Announced warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "max_grade_today": {
+        "name": "Max grade today",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "max_grade_tomorrow": {
+        "name": "Max grade tomorrow",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "max_grade_day_after": {
+        "name": "Max grade day after tomorrow",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "prewarning": {
+        "name": "Pre-warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

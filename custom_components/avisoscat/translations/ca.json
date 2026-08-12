@@ -50,6 +50,67 @@
       "already_configured": "Aquesta comarca ja està configurada."
     }
   },
+  "entity": {
+    "sensor": {
+      "warning_level": {
+        "name": "Nivell d'avís",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "active_warnings": {
+        "name": "Avisos actius"
+      },
+      "announced_warning": {
+        "name": "Avís anunciat",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "max_grade_today": {
+        "name": "Grau màxim avui",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "max_grade_tomorrow": {
+        "name": "Grau màxim demà",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "max_grade_day_after": {
+        "name": "Grau màxim demà passat",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "prewarning": {
+        "name": "Preavís",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

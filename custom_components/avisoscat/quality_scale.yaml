@@ -7,7 +7,7 @@ rules:
     comment: "No service actions exposed (bus events plus a blueprint is the chosen UX pattern, as in ha-incendiscat)."
   appropriate_polling: todo
   brands: done
-  common_modules: todo
+  common_modules: done
   config_flow: todo
   config_flow_test_coverage: todo
   dependency_transparency: done
@@ -24,9 +24,9 @@ rules:
   entity_event_setup:
     status: exempt
     comment: "Integration subscribes to no entity events; it fires bus events instead."
-  entity_unique_id: todo
-  has_entity_name: todo
-  runtime_data: todo
+  entity_unique_id: done
+  has_entity_name: done
+  runtime_data: done
   test_before_configure: todo
   test_before_setup: todo
   unique_config_entry: todo
@@ -41,7 +41,7 @@ rules:
   entity_unavailable: todo
   integration_owner: done
   log_when_unavailable: todo
-  parallel_updates: todo
+  parallel_updates: done
   reauthentication_flow: todo
   test_coverage: todo
 

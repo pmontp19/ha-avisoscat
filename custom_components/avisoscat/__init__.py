@@ -9,10 +9,11 @@ coordinator with a first refresh, hooks the once-a-minute validity recompute
 that fires `started` / `cleared` between polls without touching the network
 (docs/04-architecture.md §5), and forwards the entry to its entity platforms.
 
-`PLATFORMS` stays empty until the `sensor` and `binary_sensor` modules land:
-forwarding an entry to a platform with no module raises and makes the
-integration unloadable, so it is wired only when there is something to forward
-to. The coordinator and events do not depend on any platform.
+`PLATFORMS` grows as platform modules land: forwarding an entry to a platform
+with no module raises and makes the integration unloadable, so each one is
+wired only when there is something to forward to. The sensor platform is the
+first; `binary_sensor` joins when its task lands. The coordinator and events do
+not depend on any platform.
 """
 
 from __future__ import annotations
@@ -25,10 +26,11 @@ from homeassistant.helpers.event import async_track_time_change
 from . import coordinator
 from .const import DOMAIN
 
-# Target set is BINARY_SENSOR + SENSOR (docs/04-architecture.md §9). It stays
-# empty until those platform modules exist: forwarding a config entry to a
-# platform with no module raises and would make the integration unloadable.
-PLATFORMS: tuple[Platform, ...] = ()
+# Target set is BINARY_SENSOR + SENSOR (docs/04-architecture.md §9). Each
+# platform is wired only when its module exists: forwarding a config entry to a
+# platform with no module raises and would make the integration unloadable, so
+# `binary_sensor` joins this tuple when its task lands.
+PLATFORMS: tuple[Platform, ...] = (Platform.SENSOR,)
 
 # The coordinator a config entry carries on its `runtime_data`. Typing the entry
 # this way gives every platform `entry.runtime_data` already typed as the
