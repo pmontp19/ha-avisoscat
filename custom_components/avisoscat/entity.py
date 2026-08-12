@@ -47,6 +47,21 @@ class AvisoscatEntity(CoordinatorEntity["AvisoscatDataUpdateCoordinator"]):
     _attr_attribution = ATTRIBUTION
     _attr_has_entity_name = True
 
+    @property
+    def available(self) -> bool:
+        """Whether the entity has a last-good state to show.
+
+        The coordinator preserves the last good projections on fetch failure
+        (`coordinator.py` keeps `self.data` when `_async_update_data` raises),
+        so the entities stay readable while the source is down: a transient
+        timeout or `UpdateFailed` does not flip the sensors to `unavailable`
+        and wipe the level the user was watching. `last_update_success`
+        becomes false but the data is still there, and docs/04-architecture.md
+        §10 designates `service_connected` (a later diagnostic entity) as the
+        signal for source failure, not the entities going unavailable.
+        """
+        return self.coordinator.data is not None
+
     def __init__(
         self,
         coordinator: AvisoscatDataUpdateCoordinator,

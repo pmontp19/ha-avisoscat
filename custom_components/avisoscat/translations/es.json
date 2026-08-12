@@ -53,25 +53,61 @@
   "entity": {
     "sensor": {
       "warning_level": {
-        "name": "Nivel de aviso"
+        "name": "Nivel de aviso",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       },
       "active_warnings": {
         "name": "Avisos activos"
       },
       "announced_warning": {
-        "name": "Aviso anunciado"
+        "name": "Aviso anunciado",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       },
       "max_grade_today": {
-        "name": "Grado máximo hoy"
+        "name": "Grado máximo hoy",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       },
       "max_grade_tomorrow": {
-        "name": "Grado máximo mañana"
+        "name": "Grado máximo mañana",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       },
       "max_grade_day_after": {
-        "name": "Grado máximo pasado mañana"
+        "name": "Grado máximo pasado mañana",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       },
       "prewarning": {
-        "name": "Preaviso"
+        "name": "Preaviso",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       }
     }
   },

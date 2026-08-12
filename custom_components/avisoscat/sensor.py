@@ -44,6 +44,12 @@ if TYPE_CHECKING:
     from .coordinator import AvisoscatDataUpdateCoordinator
 
 
+# Coordinator-driven, read-only platform: entities never poll or write, so no
+# parallelism limit is needed. Declared explicitly for the silver
+# `parallel_updates` quality-scale rule (docs/04-architecture.md §9).
+PARALLEL_UPDATES = 0
+
+
 # The four traffic-light states, in increasing severity, fixed by
 # docs/03-feature-spec.md §3.1 and docs/04-architecture.md §9. Exposed in this
 # exact order so the `ENUM` device class lists them in the natural progression.
@@ -283,12 +289,13 @@ class GrauMaximSensor(_EnumSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """The four bands of the day plus the peak's meteor and threshold."""
+        """The day's peak grade and bands plus the peak's meteor and threshold."""
         dia = self._dia()
         if dia is None:
             return {}
         peak = dia.pic
         return {
+            "perill": dia.perill_maxim,
             "meteor": _meteor_value(peak),
             "periode": peak.periode if peak is not None else None,
             "nivell": peak.nivell if peak is not None else None,

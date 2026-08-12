@@ -18,8 +18,16 @@ covered. No real network, no real clock.
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+
 import pytest
-from custom_components.avisoscat.models import NivellPerill
+from custom_components.avisoscat.models import (
+    NivellPerill,
+    compute_payload_hash,
+    parse_snapshot,
+)
 from custom_components.avisoscat.sensor import (
     DIA_AVUI,
     DIA_DEMA,
@@ -501,6 +509,151 @@ async def test_async_setup_entry_creates_seven_sensors(
                 seen_keys.add(key)
                 break
     assert seen_keys == expected_keys
+
+
+# ---------------------------------------------------------------------------
+# End to end on the real capture: what the state machine publishes
+# ---------------------------------------------------------------------------
+
+CAPTURE = (
+    Path(__file__).parent.parent
+    / "docs"
+    / "captures"
+    / "smp-episodis-oberts-2026-08-05.json"
+)
+
+# The entity ids Home Assistant derives for Osona from the Catalan names, which
+# is what a dashboard or an automation is written against.
+NIVELL_ID = "sensor.avisos_meteocat_osona_nivell_d_avis"
+ACTIUS_ID = "sensor.avisos_meteocat_osona_avisos_actius"
+ANUNCIAT_ID = "sensor.avisos_meteocat_osona_avis_anunciat"
+AVUI_ID = "sensor.avisos_meteocat_osona_grau_maxim_avui"
+DEMA_ID = "sensor.avisos_meteocat_osona_grau_maxim_dema"
+
+
+async def _load_capture(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch, clock: FakeClock
+) -> tuple[object, FakeSource]:
+    """Load an Osona entry whose source serves the real captured payload.
+
+    Goes through the config-entry state machine, so the assertions read the
+    published states rather than the entity objects: that is the surface a
+    dashboard, an automation and the states developer tool see. The fake clock
+    is patched onto the coordinator and the sensor module, so validity is
+    decided by the test's wall clock and never by the real one.
+    """
+    raw = json.loads(CAPTURE.read_text(encoding="utf-8"))
+    snapshot = parse_snapshot(raw, None, payload_hash=compute_payload_hash(raw, None))
+    source = FakeSource([snapshot])
+    monkeypatch.setattr("custom_components.avisoscat.coordinator.utcnow", clock)
+    monkeypatch.setattr("custom_components.avisoscat.sensor.utcnow", clock)
+    monkeypatch.setattr(
+        "custom_components.avisoscat.coordinator.build_source",
+        lambda hass, entry: source,
+    )
+    # Catalan is the reference language, so the published names and entity ids
+    # are the Catalan ones.
+    hass.config.language = "ca"
+    entry = make_config_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return entry, source
+
+
+async def test_published_states_split_announced_from_in_force(
+    hass: HomeAssistant, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The §1.1 guard as the user reads it, on the real captured payload.
+
+    The captured warning's only remaining affectation for Osona is the `12-18`
+    band of the 6th, so at 12:00 on the 5th the published `nivell_d_avis` is
+    `cap` and `avis_anunciat` carries the grade, 24 hours ahead. `tests/
+    test_vigencia.py` pins the same case at the projection layer; this one pins
+    what reaches the state machine, translated name included.
+    """
+    await _load_capture(hass, monkeypatch, clock)
+
+    nivell = hass.states.get(NIVELL_ID)
+    anunciat = hass.states.get(ANUNCIAT_ID)
+    actius = hass.states.get(ACTIUS_ID)
+    dema = hass.states.get(DEMA_ID)
+    assert nivell is not None and anunciat is not None
+    assert actius is not None and dema is not None
+
+    assert nivell.state == NivellPerill.CAP.value
+    assert nivell.attributes["friendly_name"] == "Avisos Meteocat — Osona Nivell d'avís"
+    assert nivell.attributes["options"] == OPTIONS_EXPECTED
+    assert nivell.attributes["device_class"] == SensorDeviceClass.ENUM
+
+    assert anunciat.state == NivellPerill.ALT.value
+    assert anunciat.attributes["comenca"] == "2026-08-06T12:00:00+00:00"
+    assert anunciat.attributes["hores_per_endavant"] == 24
+    assert anunciat.attributes["dia"] == "dema"
+    assert anunciat.attributes["meteor"] == "pluja_30min"
+
+    assert actius.state == "0"
+    assert actius.attributes["avisos"] == []
+    assert actius.attributes["state_class"] == SensorStateClass.MEASUREMENT
+
+    assert dema.state == NivellPerill.ALT.value
+    assert dema.attributes["graella"] == {
+        "00-06": 0,
+        "06-12": 0,
+        "12-18": 3,
+        "18-00": 0,
+    }
+    assert dema.attributes["perill"] == 3
+
+
+async def test_published_states_follow_the_band_without_fetching(
+    hass: HomeAssistant, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The band opening while Home Assistant runs moves the published states.
+
+    Validity is a function of the wall clock, so the minute recompute has to
+    reach the entities with no new payload: the user sees `nivell_d_avis` turn
+    `alt` when the band opens and fall back to `cap` when it closes, while the
+    source is fetched exactly once. The sensors stay `available` throughout,
+    proving the last-good-state override on `AvisoscatEntity` is wired.
+    """
+    clock.now = datetime(2026, 8, 6, 11, 59, tzinfo=UTC)
+    entry, source = await _load_capture(hass, monkeypatch, clock)
+    coordinator = entry.runtime_data
+
+    assert hass.states.get(NIVELL_ID).state == NivellPerill.CAP.value
+    assert hass.states.get(ANUNCIAT_ID).state == NivellPerill.ALT.value
+
+    # The 12-18 band of the 6th opens.
+    clock.advance(minutes=2)
+    coordinator.async_schedule_minute_recompute(clock())
+    await hass.async_block_till_done()
+
+    assert hass.states.get(NIVELL_ID).state == NivellPerill.ALT.value
+    assert hass.states.get(ACTIUS_ID).state == "1"
+    assert hass.states.get(ACTIUS_ID).attributes["avisos"] == [
+        {
+            "meteor": "pluja_30min",
+            "perill": 3,
+            "tipus": "avis",
+            "periode": "12-18",
+            "llindar": "Intensitat > 20 mm / 30 minuts",
+        }
+    ]
+    # Nothing is announced any more: the announced horizon emptied as the
+    # affectation moved into force.
+    assert hass.states.get(ANUNCIAT_ID).state == NivellPerill.CAP.value
+
+    # The warning's own dataFi is 17:59 on the 6th, so the band closes there.
+    clock.advance(hours=6)
+    coordinator.async_schedule_minute_recompute(clock())
+    await hass.async_block_till_done()
+
+    assert hass.states.get(NIVELL_ID).state == NivellPerill.CAP.value
+    assert hass.states.get(ACTIUS_ID).state == "0"
+    # The day's outlook keeps the peak: the band is over, the day still had it.
+    assert hass.states.get(AVUI_ID).attributes["perill"] == 3
+    assert source.calls == 1
 
 
 # ---------------------------------------------------------------------------
