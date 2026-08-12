@@ -50,6 +50,31 @@
       "already_configured": "Esta comarca ya está configurada."
     }
   },
+  "entity": {
+    "sensor": {
+      "warning_level": {
+        "name": "Nivel de aviso"
+      },
+      "active_warnings": {
+        "name": "Avisos activos"
+      },
+      "announced_warning": {
+        "name": "Aviso anunciado"
+      },
+      "max_grade_today": {
+        "name": "Grado máximo hoy"
+      },
+      "max_grade_tomorrow": {
+        "name": "Grado máximo mañana"
+      },
+      "max_grade_day_after": {
+        "name": "Grado máximo pasado mañana"
+      },
+      "prewarning": {
+        "name": "Preaviso"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

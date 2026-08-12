@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from custom_components.avisoscat import PLATFORMS, const
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
@@ -64,9 +65,13 @@ async def test_manifest_as_home_assistant_loads_it(hass: HomeAssistant) -> None:
     assert integration.manifest["quality_scale"] == "silver"
 
 
-def test_no_platforms_yet() -> None:
-    """The scaffold forwards to no platform: sensor/binary_sensor come later."""
-    assert PLATFORMS == ()
+def test_sensor_platform_is_forwarded() -> None:
+    """The sensor platform is wired now that its module has landed.
+
+    `binary_sensor` joins when its task lands; until then, forwarding only the
+    sensor platform keeps setup from raising on a missing module.
+    """
+    assert PLATFORMS == (Platform.SENSOR,)
 
 
 def test_documented_endpoints_are_defined() -> None:

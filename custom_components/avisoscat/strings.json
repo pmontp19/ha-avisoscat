@@ -50,6 +50,31 @@
       "already_configured": "This comarca is already configured."
     }
   },
+  "entity": {
+    "sensor": {
+      "warning_level": {
+        "name": "Warning level"
+      },
+      "active_warnings": {
+        "name": "Active warnings"
+      },
+      "announced_warning": {
+        "name": "Announced warning"
+      },
+      "max_grade_today": {
+        "name": "Max grade today"
+      },
+      "max_grade_tomorrow": {
+        "name": "Max grade tomorrow"
+      },
+      "max_grade_day_after": {
+        "name": "Max grade day after tomorrow"
+      },
+      "prewarning": {
+        "name": "Pre-warning"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {

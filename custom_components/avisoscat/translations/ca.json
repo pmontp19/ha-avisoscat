@@ -50,6 +50,31 @@
       "already_configured": "Aquesta comarca ja està configurada."
     }
   },
+  "entity": {
+    "sensor": {
+      "warning_level": {
+        "name": "Nivell d'avís"
+      },
+      "active_warnings": {
+        "name": "Avisos actius"
+      },
+      "announced_warning": {
+        "name": "Avís anunciat"
+      },
+      "max_grade_today": {
+        "name": "Grau màxim avui"
+      },
+      "max_grade_tomorrow": {
+        "name": "Grau màxim demà"
+      },
+      "max_grade_day_after": {
+        "name": "Grau màxim demà passat"
+      },
+      "prewarning": {
+        "name": "Preavís"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
