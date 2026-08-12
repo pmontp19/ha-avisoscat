@@ -512,7 +512,10 @@ Onze decisions que no es llegeixen del sketch:
 
 ⚠️ Com que la vigència depèn del rellotge, el coordinator **no** pot limitar-se a recalcular
 quan arriba dada nova. `__init__.py` registra un `async_track_time_change` cada minut que
-força `coordinator.async_set_updated_data(recompute())` sense fer cap petició de xarxa.
+torna a projectar el snapshot en cache i, si les projeccions han canviat, notifica les
+entitats via `async_update_listeners` — sense cap petició de xarxa. Ho fa **expressament**
+sense `async_set_updated_data`, perquè aquesta reprograma el poll i cridar-la cada minut
+l'aniria endarrerint indefinidament.
 Sense això, un avís que comença a les 12:00 UTC no s'encendria fins al següent poll.
 
 ---
@@ -565,18 +568,19 @@ Estat que manté:
 @dataclass
 class AvisoscatState:
     snapshot: SmpSnapshot | None
-    en_vigor: dict[Meteor, AfectacioProjectada]  # actiu ARA (horitzó VIGENT)
-    anunciats: dict[
-        Meteor, AfectacioProjectada
-    ]  # emès, encara no vigent (horitzó ANUNCIAT)
-    outlook: dict[date, dict[str, int]]  # dia -> {franja: grau}, 3 dies
+    en_vigor: list[AfectacioProjectada]  # actiu ARA (horitzó VIGENT)
+    anunciats: list[AfectacioProjectada]  # emès, encara no vigent (horitzó ANUNCIAT)
+    outlook: list[OutlookDia]  # graella dia × franja, 3 dies (§5)
     preavis: Preavis | None
     temps_violent: TempsViolent | None
     last_success: datetime | None
     last_error: str | None
     consecutive_failures: int
     quota: QuotaInfo | None
-    announced_seen: set[tuple[Meteor, TipusAvis, datetime]]  # dedup d'anuncis
+    # La memòria de dedup NO és un camp de l'estat: viu al coordinator
+    # (self._announced_seen, self._violent_seen, self._in_force), perquè un
+    # estat congelat compari per projecció i el dict-per-meteor es construeix
+    # de pas a `_emit_*`, no s'emmagatzema.
 ```
 
 `en_vigor` i `anunciats` són **dues projeccions del mateix snapshot**, separades pel
@@ -601,27 +605,30 @@ xarxa.
 Dos bucles independents, un per horitzó.
 
 ```python
-def _emit_announced(state, anunciats) -> None:
+def _emit_announced(self, anunciats: list[AfectacioProjectada]) -> None:
     """Emissions noves. Dedup per (meteor, tipus, data_emissio)."""
-    for meteor, af in anunciats.items():
-        key = (meteor, af.tipus, af.data_emissio)
-        if key not in state.announced_seen:
-            state.announced_seen.add(key)
-            fire(EVENT_WARNING_ANNOUNCED, payload_announced(af))
+    for af in _per_meteor(anunciats).values():  # una per meteor, la més greu
+        key = self._emissio_key(af)
+        if key not in self._announced_seen:
+            self._announced_seen.add(key)
+            self._fire(EVENT_WARNING_ANNOUNCED, _payload_announced(af))
 
 
-def _emit_in_force(prev: dict[Meteor, AfectacioProjectada], curr) -> None:
-    for meteor, af in curr.items():
-        old = prev.get(meteor)
+def _emit_in_force(self, en_vigor: list[AfectacioProjectada], now) -> None:
+    # El temps violent no és un `started` genèric: té el seu event propi.
+    ordinary = _per_meteor(af for af in en_vigor if not af.is_temps_violent)
+    for meteor, af in ordinary.items():
+        old = self._in_force.get(meteor)
         if old is None:
-            fire(EVENT_WARNING_STARTED, payload_started(af))
+            self._fire(EVENT_WARNING_STARTED, _payload_started(af))
         elif af.perill > old.perill:
-            fire(EVENT_WARNING_UPGRADED, payload(af, old))
+            self._fire(EVENT_WARNING_UPGRADED, _payload_grade(af, old))
         elif af.perill < old.perill:
-            fire(EVENT_WARNING_DOWNGRADED, payload(af, old))
-    for meteor, old in prev.items():
-        if meteor not in curr:
-            fire(EVENT_WARNING_CLEARED, payload_cleared(old))
+            self._fire(EVENT_WARNING_DOWNGRADED, _payload_grade(af, old))
+    for meteor, old in self._in_force.items():
+        if meteor not in ordinary:
+            self._fire(EVENT_WARNING_CLEARED, _payload_cleared(old, now))
+    self._in_force = ordinary
 ```
 
 Detalls que importen:
