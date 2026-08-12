@@ -133,6 +133,7 @@ async def _build_sensors(
     monkeypatch: pytest.MonkeyPatch,
     clock: FakeClock,
     snapshot: object,
+    *,
     entry: object | None = None,
 ) -> tuple[
     NivellDAvisSensor,
