@@ -38,16 +38,36 @@
           "include_sea": "Segueix també la zona marítima davant d'aquesta comarca.",
           "scan_interval": "Minuts entre consultes. Deixeu-ho en blanc per al sondeig adaptatiu."
         }
+      },
+      "reauth_confirm": {
+        "title": "Actualitza la clau API",
+        "description": "La clau API de Meteocat ha estat rebutjada (403). Introduïu una clau nova per continuar fent servir la font oficial.",
+        "data": {
+          "api_key": "Clau API"
+        }
+      },
+      "reconfigure": {
+        "title": "Avisos Meteocat",
+        "description": "Trieu la comarca que voleu seguir en lloc de l'actual. Es conserva l'historial de les entitats que sobreviuen al canvi.",
+        "data": {
+          "id_comarca": "Comarca"
+        },
+        "data_description": {
+          "id_comarca": "L'identificador únic de l'entrada no canvia, de manera que les entitats que sobreviuen conserven l'historial."
+        }
       }
     },
     "error": {
       "location_outside_catalonia": "La ubicació és fora de Catalunya. Trieu una comarca de la llista.",
       "cannot_connect": "No s'ha pogut connectar amb Meteocat. Comproveu la connexió i torneu-ho a provar.",
       "invalid_geometry": "No s'ha pogut llegir el mapa de comarques. Trieu una comarca de la llista.",
-      "invalid_auth": "La clau API ha estat rebutjada. Comproveu-la i torneu-ho a provar."
+      "invalid_auth": "La clau API ha estat rebutjada. Comproveu-la i torneu-ho a provar.",
+      "api_key_required": "Cal una clau API per continuar."
     },
     "abort": {
-      "already_configured": "Aquesta comarca ja està configurada."
+      "already_configured": "Aquesta comarca ja està configurada.",
+      "reauth_successful": "La clau API s'ha actualitzat correctament.",
+      "reconfigure_successful": "La comarca s'ha actualitzat correctament."
     }
   },
   "entity": {
