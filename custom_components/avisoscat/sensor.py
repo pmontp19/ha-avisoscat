@@ -1,7 +1,7 @@
 """Level sensors: the warning level now, the active count, and the outlook grid.
 
 The platform that answers the two questions a user opens the integration for
-(docs/03-feature-spec.md §3.1-§3.4, §3.6):
+(docs/03-feature-spec.md §3.1-§3.6):
 
 * **How bad is it right now?** `nivell_d_avis` (§3.1) and `avisos_actius` (§3.2)
   read the in-force projection (`state.en_vigor`).
@@ -11,6 +11,9 @@ The platform that answers the two questions a user opens the integration for
   error of §1.1, so each sensor sticks to one projection.
 * `preavis` (§3.6) reads the Catalonia-wide pre-warnings
   (`state.snapshot.preavisos`), which have no comarca.
+* The ten `avis_<meteor>` sensors (§3.5) narrow §3.1 to one phenomenon, so a
+  dashboard or automation can follow "is there a heat warning?" without parsing
+  the aggregate. They are created only for the meteors the user selected.
 
 Every level sensor is `SensorDeviceClass.ENUM` with the four traffic-light
 states (docs/04-architecture.md §9), so dashboards and automation conditions
@@ -19,7 +22,8 @@ treat the level as a discrete state instead of a string to compare against.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+import logging
+from typing import TYPE_CHECKING, Any, ClassVar, Final
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -30,8 +34,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.dt import utcnow
 
+from .config_flow import DEFAULT_METEORS
+from .const import CONF_METEORS
 from .entity import AvisoscatEntity, iso
-from .models import NivellPerill, Preavis
+from .models import Meteor, NivellPerill, Preavis
 from .vigencia import (
     AfectacioProjectada,
     OutlookDia,
@@ -42,6 +48,8 @@ from .vigencia import (
 if TYPE_CHECKING:
     from . import AvisoscatConfigEntry
     from .coordinator import AvisoscatDataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # Coordinator-driven, read-only platform: entities never poll or write, so no
@@ -75,22 +83,53 @@ async def async_setup_entry(
 ) -> None:
     """Create the level sensors for one comarca.
 
-    These seven sensors exist for every entry unconditionally: the per-meteor
-    sensors (§3.5) and the maritime sensor (§3.7) are the ones that depend on
-    options, and they land in their own tasks.
+    The seven aggregate sensors exist for every entry unconditionally. The ten
+    per-meteor sensors (§3.5) are created only for the meteors the user selected
+    in the options flow: when that selection changes HA reloads the entry, which
+    is how this function runs again against the new list. The maritime sensor
+    (§3.7) is the other option-dependent entity and lands in its own task.
     """
     coordinator = entry.runtime_data
-    async_add_entities(
-        [
-            NivellDAvisSensor(coordinator, entry),
-            AvisosActiusSensor(coordinator, entry),
-            AvisAnunciatSensor(coordinator, entry),
-            GrauMaximSensor(coordinator, entry, DIA_AVUI),
-            GrauMaximSensor(coordinator, entry, DIA_DEMA),
-            GrauMaximSensor(coordinator, entry, DIA_DEMA_PASSAT),
-            PreavisSensor(coordinator, entry),
-        ]
-    )
+    entities: list[SensorEntity] = [
+        NivellDAvisSensor(coordinator, entry),
+        AvisosActiusSensor(coordinator, entry),
+        AvisAnunciatSensor(coordinator, entry),
+        GrauMaximSensor(coordinator, entry, DIA_AVUI),
+        GrauMaximSensor(coordinator, entry, DIA_DEMA),
+        GrauMaximSensor(coordinator, entry, DIA_DEMA_PASSAT),
+        PreavisSensor(coordinator, entry),
+    ]
+    entities.extend(_meteor_sensors(coordinator, entry))
+    async_add_entities(entities)
+
+
+def _meteor_sensors(
+    coordinator: AvisoscatDataUpdateCoordinator,
+    entry: AvisoscatConfigEntry,
+) -> list[MeteorSensor]:
+    """Build the per-meteor sensors for the selected meteors (§3.5).
+
+    The options store meteor *values* (the strings the `Meteor` enum maps to),
+    never the enums. A value that is not a known meteor - a name the source sent
+    that the parser did not recognise, or a literal left over from an old entry
+    after the enum evolved - is skipped with a warning, never silently turned
+    into a sensor for a generic meteor (docs/03-feature-spec.md §3.5, trap #5).
+    Missing options default to "follow all ten", matching the config flow.
+    """
+    selected = entry.options.get(CONF_METEORS, DEFAULT_METEORS)
+    sensors: list[MeteorSensor] = []
+    for value in selected:
+        meteor = _METEOR_BY_VALUE.get(value)
+        if meteor is None:
+            _LOGGER.warning(
+                "Unknown meteor %r in the options of entry %s; "
+                "not creating a per-meteor sensor for it",
+                value,
+                entry.entry_id,
+            )
+            continue
+        sensors.append(MeteorSensor(coordinator, entry, meteor))
+    return sensors
 
 
 def _meteor_value(af: AfectacioProjectada | None) -> str | None:
@@ -360,3 +399,117 @@ class PreavisSensor(_EnumSensor):
             "data_fi": iso(preavis.data_fi),
             "comentari": preavis.comentari,
         }
+
+
+# Meteor enum value → enum member, so the options list (plain strings) is
+# resolved without a try/except and an unknown value reads as `None`.
+_METEOR_BY_VALUE: Final[dict[str, Meteor]] = {meteor.value: meteor for meteor in Meteor}
+
+# Meteor → translation key (docs/03-feature-spec.md §3.5). The translation key
+# also becomes the entity name suffix and the second half of the unique id, so
+# `avis_vent` is `warning_wind` everywhere: in the UI, in the entity registry,
+# and in the dashboard the user writes against it.
+_METEOR_TRANSLATION_KEYS: Final[dict[Meteor, str]] = {
+    Meteor.VENT: "warning_wind",
+    Meteor.PLUJA_30MIN: "warning_rain_30min",
+    Meteor.PLUJA_3H: "warning_rain_3h",
+    Meteor.PLUJA_ACUMULADA: "warning_rain_accumulated",
+    Meteor.NEU: "warning_snow",
+    Meteor.MAR: "warning_sea",
+    Meteor.FRED: "warning_cold",
+    Meteor.CALOR: "warning_heat",
+    Meteor.CALOR_NOCTURNA: "warning_night_heat",
+    Meteor.TEMPS_VIOLENT: "warning_violent_weather",
+}
+
+
+class MeteorSensor(_EnumSensor):
+    """Grau de l'avís d'un meteor concret (§3.5).
+
+    One instance per selected meteor. Restricts §3.1's aggregate picture to a
+    single phenomenon: the state is that meteor's in-force traffic-light
+    category (`cap` when no in-force warning of this meteor exists), and the
+    `graus_per_periode` attribute exposes today's per-band max for this meteor
+    alone, so a dashboard can paint a per-meteor bar of the day ahead without
+    folding in unrelated phenomena.
+
+    The peak attributes (`perill`, `nivell`, `llindar`, ...) are anchored to the
+    in-force peak of this meteor and are absent when none is in force, mirroring
+    `NivellDAvisSensor`. The `graus_per_periode` grid is independent of the
+    in-force status: it carries the four bands of the current day for this
+    meteor, including bands that are only announced later today.
+    """
+
+    def __init__(
+        self,
+        coordinator: AvisoscatDataUpdateCoordinator,
+        entry: AvisoscatConfigEntry,
+        meteor: Meteor,
+    ) -> None:
+        """Pin the meteor and the translation key that names this sensor."""
+        translation_key = _METEOR_TRANSLATION_KEYS[meteor]
+        super().__init__(coordinator, entry, translation_key)
+        self._attr_translation_key = translation_key
+        self._meteor = meteor
+
+    def _peak(self) -> AfectacioProjectada | None:
+        """The severest in-force projection for this meteor, `None` when none."""
+        return pic(self._en_vigor_del_meteor())
+
+    def _en_vigor_del_meteor(self) -> list[AfectacioProjectada]:
+        """The in-force projections that belong to this sensor's meteor."""
+        state = self.coordinator.data
+        if state is None:
+            return []
+        return [af for af in state.en_vigor if af.meteor is self._meteor]
+
+    def _avui(self) -> OutlookDia | None:
+        """Today's outlook day, `None` before the first fetch."""
+        state = self.coordinator.data
+        if state is None:
+            return None
+        for dia in state.outlook:
+            if dia.etiqueta == DIA_AVUI:
+                return dia
+        return None
+
+    def _graus_per_periode(self) -> dict[str, int]:
+        """Today's per-band max for this meteor only, all four bands present.
+
+        A cell holds the highest grade of this meteor's affectations whose
+        effective interval overlaps the band, which is the same overlap test the
+        outlook uses (docs/03-feature-spec.md §3.4): a violent-weather window
+        straddling two bands appears in both. Grade 0 fills the bands this
+        meteor does not reach, so the grid never has a missing cell.
+        """
+        avui = self._avui()
+        if avui is None:
+            return {}
+        return {
+            periode.periode: max(
+                (af.perill for af in periode.afectacions if af.meteor is self._meteor),
+                default=0,
+            )
+            for periode in avui.periodes
+        }
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """The §3.5 attribute table, anchored to this meteor's in-force peak."""
+        attrs: dict[str, Any] = {}
+        peak = self._peak()
+        if peak is not None:
+            attrs["perill"] = peak.perill
+            attrs["nivell"] = peak.nivell
+            attrs["llindar"] = peak.llindar
+            attrs["periode"] = peak.periode
+            attrs["distribucio_geografica"] = peak.distribucio_geografica
+            attrs["comentari"] = peak.comentari
+            attrs["data_inici"] = iso(peak.data_inici)
+            attrs["data_fi"] = iso(peak.data_fi)
+        # `graus_per_periode` is independent of the in-force peak: it paints
+        # the day ahead for this meteor, announced bands included.
+        graus = self._graus_per_periode()
+        if graus:
+            attrs["graus_per_periode"] = graus
+        return attrs

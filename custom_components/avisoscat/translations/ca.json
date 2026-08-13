@@ -152,6 +152,96 @@
           "alt": "Alt",
           "molt_alt": "Molt alt"
         }
+      },
+      "warning_wind": {
+        "name": "Avís de vent",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_rain_30min": {
+        "name": "Avís de pluja (30 min)",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_rain_3h": {
+        "name": "Avís de pluja (3 h)",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_rain_accumulated": {
+        "name": "Avís de pluja acumulada",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_snow": {
+        "name": "Avís de neu",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_sea": {
+        "name": "Avís d'estat de la mar",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_cold": {
+        "name": "Avís de fred",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_heat": {
+        "name": "Avís de calor",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_night_heat": {
+        "name": "Avís de calor nocturna",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
+      },
+      "warning_violent_weather": {
+        "name": "Avís de temps violent",
+        "state": {
+          "cap": "Cap",
+          "moderat": "Moderat",
+          "alt": "Alt",
+          "molt_alt": "Molt alt"
+        }
       }
     }
   },
