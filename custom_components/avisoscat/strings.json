@@ -38,16 +38,36 @@
           "include_sea": "Also follow the maritime zone in front of this comarca.",
           "scan_interval": "Minutes between updates. Leave blank for adaptive polling."
         }
+      },
+      "reauth_confirm": {
+        "title": "Update the API key",
+        "description": "The Meteocat API key was rejected (403). Enter a new key to keep using the official source.",
+        "data": {
+          "api_key": "API key"
+        }
+      },
+      "reconfigure": {
+        "title": "Avisos Meteocat",
+        "description": "Pick the comarca you want to follow instead. Entity history for the surviving entities is preserved.",
+        "data": {
+          "id_comarca": "Comarca"
+        },
+        "data_description": {
+          "id_comarca": "The unique id of the entry does not change, so entities that survive the move keep their history."
+        }
       }
     },
     "error": {
       "location_outside_catalonia": "The location is outside Catalonia. Pick a comarca from the list.",
       "cannot_connect": "Could not connect to Meteocat. Check your connection and try again.",
       "invalid_geometry": "The comarca map could not be read. Pick a comarca from the list.",
-      "invalid_auth": "The API key was rejected. Check it and try again."
+      "invalid_auth": "The API key was rejected. Check it and try again.",
+      "api_key_required": "An API key is required to continue."
     },
     "abort": {
-      "already_configured": "This comarca is already configured."
+      "already_configured": "This comarca is already configured.",
+      "reauth_successful": "The API key was updated successfully.",
+      "reconfigure_successful": "The comarca was updated successfully."
     }
   },
   "entity": {

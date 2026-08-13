@@ -16,8 +16,10 @@ Two steps plus a fallback (docs/03-feature-spec.md §2):
    the Meteocat quota endpoint and, when accepted, selects the official source.
 
 A separate `OptionsFlow` exposes everything from step 3 except `api_key`, which
-is rotated through reauth (docs/04-architecture.md §11). Reauth and reconfigure
-are out of scope for this task.
+is rotated through reauth when the official source returns `403`
+(docs/04-architecture.md §10), and `async_step_reconfigure` reopens step 1 to
+move an entry to a different comarca without losing entity history: the entry
+`unique_id` is kept stable on purpose, only `entry.data` and the title change.
 
 Multi-entry by design: one config entry per comarca, `unique_id = str(id_comarca)`
 with `_abort_if_unique_id_configured()`. There is no `single_config_entry` and
@@ -26,11 +28,13 @@ no YAML (docs/03-feature-spec.md §2).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Final
 
 import voluptuous as vol
 from homeassistant.config_entries import (
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
@@ -345,25 +349,174 @@ class AvisoscatConfigFlow(ConfigFlow, domain=DOMAIN):
         self._id_comarca = id_comarca
         return await self.async_step_options()
 
+    # ------------------------------------------------------------------
+    # Reauth: a 403 from the official source reopens the API-key field only
+    # ------------------------------------------------------------------
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Entry point HA calls when the coordinator raised `ConfigEntryAuthFailed`.
+
+        The actual form lives in `async_step_reauth_confirm`, the standard HA
+        two-step pattern: this hook only carries the reauth context forward, so
+        the user sees a focused "enter a new API key" screen instead of the
+        whole options form.
+        """
+        return await self.async_step_reauth_confirm(None)
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Prompt for a fresh API key and persist it onto the existing entry.
+
+        Reauth is specifically about fixing a rejected key, so the field is
+        required and a blank submit is sent back as `api_key_required` rather
+        than accepted as "go keyless": dropping back to the keyless source is a
+        different user action (remove the entry and re-add it). On success the
+        new key overwrites `entry.data[CONF_API_KEY]` and the entry is reloaded
+        so the coordinator rebuilds the source with it.
+        """
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            api_key = (user_input.get(CONF_API_KEY) or "").strip()
+            if not api_key:
+                errors[CONF_API_KEY] = "api_key_required"
+            else:
+                error = await async_validate_api_key(self.hass, api_key)
+                if error is not None:
+                    errors[CONF_API_KEY] = error
+
+            if not errors:
+                self.hass.config_entries.async_update_entry(
+                    entry,
+                    data={**entry.data, CONF_API_KEY: api_key},
+                )
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=_reauth_schema(default=entry.data.get(CONF_API_KEY, "")),
+            errors=errors,
+            description_placeholders={"api_key": entry.data.get(CONF_API_KEY, "")},
+        )
+
+    # ------------------------------------------------------------------
+    # Reconfigure: move the entry to a different comarca
+    # ------------------------------------------------------------------
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Reopen step 1 to move an existing entry to another comarca.
+
+        The `unique_id` is left untouched on purpose: entities whose `unique_id`
+        is derived from the entry's keep their state history across the move,
+        even though the title (and therefore the visible `entity_id`) follows
+        the new comarca. The `include_sea` option is reconciled with the new
+        comarca: stripped if the new comarca is inland, defaulted to `False` if
+        it is coastal and was previously absent.
+        """
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            new_id = int(user_input[CONF_ID_COMARCA])
+            self.hass.config_entries.async_update_entry(
+                entry,
+                data={**entry.data, CONF_ID_COMARCA: new_id},
+                title=_entry_title(new_id),
+                options=_reconcile_options_for_comarca(new_id, dict(entry.options)),
+            )
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="reconfigure_successful")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_comarca_schema(),
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> AvisoscatOptionsFlow:
-        """Return the options flow handler."""
-        return AvisoscatOptionsFlow()
+        """Return the options flow handler.
+
+        The entry is passed in explicitly so the options flow never has to reach
+        for the deprecated `self.config_entry` shortcut: it keeps its own
+        reference, which is also available in `__init__` (the base-class
+        property is not).
+        """
+        return AvisoscatOptionsFlow(config_entry)
+
+
+def _reauth_schema(*, default: str) -> vol.Schema:
+    """The reauth form: only the API-key field, prefilled with the old key.
+
+    The previous key is shown by default and also passed as a
+    `description_placeholder`, so the user can confirm which entry they are
+    fixing without it being echoed back as plain text on screen.
+    """
+    return vol.Schema(
+        {
+            vol.Optional(CONF_API_KEY, default=default): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            )
+        }
+    )
+
+
+def _reconcile_options_for_comarca(
+    id_comarca: int, options: dict[str, Any]
+) -> dict[str, Any]:
+    """Drop or default `include_sea` to match a comarca's maritime status.
+
+    Used by `async_step_reconfigure` after a comarca change: an inland target
+    comarca cannot honour a left-over `include_sea=True`, and a coastal target
+    deserves the same default (`False`) the initial setup would have applied.
+    Everything else in `options` (meteors, threshold, scan interval) is
+    comarca-independent and stays as it was.
+    """
+    if id_mar(id_comarca) is None:
+        options.pop(CONF_INCLUDE_SEA, None)
+    else:
+        options.setdefault(CONF_INCLUDE_SEA, DEFAULT_INCLUDE_SEA)
+    return options
 
 
 class AvisoscatOptionsFlow(OptionsFlow):
     """Edit the step 2 options of an existing entry.
 
     Everything from step 2 except `api_key`, which is rotated through reauth
-    (docs/03-feature-spec.md §2, docs/04-architecture.md §11).
+    (docs/03-feature-spec.md §2, docs/04-architecture.md §10).
     """
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Keep an explicit reference to the entry being edited.
+
+        Avoids the `self.config_entry` shortcut the base class exposes: the
+        entry arrives as a constructor argument here, which is also valid inside
+        `__init__` (the base-class property is not yet wired up at that point).
+        """
+        super().__init__()
+        self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the per-comarca options."""
-        id_comarca = int(self.config_entry.data[CONF_ID_COMARCA])
+        """Manage the per-comarca options and reload the entry on submit.
+
+        Reloading is what rebuilds the per-meteor sensors against the new
+        selection. The reload only runs when the entry is loaded: a setup that
+        failed or never completed has nothing to tear down, and forcing it to
+        load through the options flow would mask the original setup failure
+        behind an unrelated network call.
+        """
+        config_entry = self._config_entry
+        id_comarca = int(config_entry.data[CONF_ID_COMARCA])
 
         if user_input is not None:
             options: dict[str, Any] = {
@@ -373,6 +526,12 @@ class AvisoscatOptionsFlow(OptionsFlow):
             }
             if id_mar(id_comarca) is not None:
                 options[CONF_INCLUDE_SEA] = user_input[CONF_INCLUDE_SEA]
+            # Persist the new options before reloading, so the platforms that
+            # come back read the new selection. `async_create_entry` would also
+            # update them, but only after the reload has already started.
+            self.hass.config_entries.async_update_entry(config_entry, options=options)
+            if config_entry.state is ConfigEntryState.LOADED:
+                await self.hass.config_entries.async_reload(config_entry.entry_id)
             return self.async_create_entry(title="", data=options)
 
         return self.async_show_form(
@@ -380,6 +539,6 @@ class AvisoscatOptionsFlow(OptionsFlow):
             data_schema=_options_schema(
                 id_comarca=id_comarca,
                 with_api_key=False,
-                defaults=dict(self.config_entry.options),
+                defaults=dict(config_entry.options),
             ),
         )
