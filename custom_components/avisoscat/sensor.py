@@ -10,7 +10,7 @@ The platform that answers the two questions a user opens the integration for
   per-day outlook (`state.outlook`). Mixing these two horizons up is the design
   error of §1.1, so each sensor sticks to one projection.
 * `preavis` (§3.6) reads the Catalonia-wide pre-warnings
-  (`state.snapshot.preavisos`), which have no comarca.
+  (`state.preavisos`), which have no comarca.
 * The ten `avis_<meteor>` sensors (§3.5) narrow §3.1 to one phenomenon, so a
   dashboard or automation can follow "is there a heat warning?" without parsing
   the aggregate. They are created only for the meteors the user selected.
@@ -356,8 +356,8 @@ class PreavisSensor(_EnumSensor):
     """Grau màxim del preavís vigent a escala de Catalunya (§3.6).
 
     Pre-warnings have no comarca and no time bands, so this sensor does not
-    read `state.en_vigor`: it picks the severest open pre-warning from the
-    snapshot, evaluated against the clock by `vigencia.preavisos_actius`.
+    read `state.en_vigor`: it picks the severest open pre-warning from
+    `state.preavisos`, evaluated against the clock by `vigencia.preavisos_actius`.
     """
 
     _attr_translation_key = "prewarning"
@@ -372,9 +372,9 @@ class PreavisSensor(_EnumSensor):
     def _preavis(self) -> Preavis | None:
         """The severest open pre-warning at the Catalonia scale, `None` if none."""
         state = self.coordinator.data
-        if state is None or state.snapshot is None:
+        if state is None:
             return None
-        actius = preavisos_actius(state.snapshot.preavisos, utcnow())
+        actius = preavisos_actius(state.preavisos, utcnow())
         return actius[0] if actius else None
 
     @property

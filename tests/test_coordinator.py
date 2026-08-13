@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from custom_components.avisoscat import const as c
 from homeassistant.config_entries import ConfigEntryAuthFailed
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .conftest import (
@@ -34,6 +34,28 @@ def _midday_vent(*, perill: float = 3.0):
     return make_snapshot(
         [episodi_raw([evolucio_raw({"12-18": [afectacio_raw(perill=perill)]})])]
     )
+
+
+def _preavis_raw(
+    *,
+    perill: float = 4.0,
+    estat: str = "Vigent",
+    meteor: str = "Vent",
+    data_fi: str = "2026-08-07T23:59Z",
+) -> dict:
+    """A raw Catalonia-scale pre-warning, ready for `make_snapshot(preavisos=...)`."""
+    return {
+        "tipus": "Preavís",
+        "estat": estat,
+        "perill": perill,
+        "nivell": 2.0,
+        "llindar": "Ratxa màxima > 90 km/h (25 m/s)",
+        "comentari": "Ratxes al litoral.",
+        "dataEmisio": "2026-08-05T10:00Z",
+        "dataInici": "2026-08-06T12:00Z",
+        "dataFi": data_fi,
+        "meteor": {"idMeteor": None, "nom": meteor},
+    }
 
 
 def _busy_seed():
@@ -283,3 +305,159 @@ async def test_minute_recompute_is_a_noop_before_the_first_fetch(
     await hass.async_block_till_done()
 
     assert coord.data is None  # still nothing to recompute against
+
+
+# ---------------------------------------------------------------------------
+# Preavis staleness: a pre-warning change wakes the entities within one cycle
+# ---------------------------------------------------------------------------
+#
+# `__eq__` used to compare only the three comarca projections, so a Catalonia-
+# wide pre-warning published or withdrawn while the comarca stayed quiet never
+# differed from the previous state: `always_update=False` then suppressed the
+# listener notification and `PreavisSensor` stayed stale until an unrelated
+# projection moved (up to ~24 h). The tests below rotate the source state with a
+# fake clock and assert the listener wakes on the cycle the pre-warning changes.
+
+
+def _listener_box() -> tuple[list, object]:
+    """A `(calls, callback)` pair that records every coordinator notification."""
+
+    calls: list = []
+
+    @callback
+    def _on_update() -> None:
+        calls.append(True)
+
+    return calls, _on_update
+
+
+async def test_preavis_published_in_quiet_comarca_notifies_listeners(
+    hass: HomeAssistant, clock: FakeClock, make_coordinator
+) -> None:
+    """A pre-warning appearing with no projection change still wakes entities."""
+    quiet = make_snapshot([])  # no episodis, no preavisos
+    with_preavis = make_snapshot([], preavisos=[_preavis_raw(perill=4.0)])
+    coord, _source = make_coordinator(clock, [quiet, with_preavis])
+
+    await coord.async_refresh()  # seed: quiet comarca
+    await hass.async_block_till_done()
+    assert coord.data is not None
+    assert coord.data.preavisos == ()
+
+    calls, on_update = _listener_box()
+    coord.async_add_listener(on_update)
+
+    await coord.async_refresh()  # a preavis appears, the comarca stays quiet
+    await hass.async_block_till_done()
+
+    # The listener woke within this single poll cycle, not ~24 h later.
+    assert len(calls) == 1
+    assert coord.data is not None
+    assert len(coord.data.preavisos) == 1
+    assert coord.data.preavisos[0].perill == 4
+    # The comarca projections are unchanged: this was a preavis-only change.
+    assert coord.data.en_vigor == []
+    assert coord.data.anunciats == []
+
+
+async def test_preavis_removed_from_source_notifies_listeners(
+    hass: HomeAssistant, clock: FakeClock, make_coordinator
+) -> None:
+    """A pre-warning withdrawn from the source wakes entities within one cycle."""
+    with_preavis = make_snapshot([], preavisos=[_preavis_raw(perill=4.0)])
+    quiet = make_snapshot([])
+    coord, _source = make_coordinator(clock, [with_preavis, quiet])
+
+    await coord.async_refresh()  # seed: one pre-warning
+    await hass.async_block_till_done()
+    assert coord.data is not None
+    assert len(coord.data.preavisos) == 1
+
+    calls, on_update = _listener_box()
+    coord.async_add_listener(on_update)
+
+    await coord.async_refresh()  # the source drops the pre-warning
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert coord.data is not None
+    assert coord.data.preavisos == ()
+
+
+async def test_rotated_preavisos_do_not_spuriously_notify_listeners(
+    hass: HomeAssistant, clock: FakeClock, make_coordinator
+) -> None:
+    """Identical pre-warnings in a rotated order keep the state equal.
+
+    The feed does not guarantee list order between requests, so `__eq__` must be
+    order-insensitive: two snapshots with the same pre-warnings reordered must
+    not wake the entities every cycle (docs/01-data-sources.md §3.1).
+    """
+    a = make_snapshot(
+        [],
+        preavisos=[
+            _preavis_raw(perill=4.0, meteor="Vent"),
+            _preavis_raw(perill=2.0, meteor="Calor"),
+        ],
+    )
+    b = make_snapshot(
+        [],
+        preavisos=[
+            _preavis_raw(perill=2.0, meteor="Calor"),
+            _preavis_raw(perill=4.0, meteor="Vent"),
+        ],
+    )
+    coord, _source = make_coordinator(clock, [a, b])
+
+    await coord.async_refresh()  # seed
+    await hass.async_block_till_done()
+
+    calls, on_update = _listener_box()
+    coord.async_add_listener(on_update)
+
+    await coord.async_refresh()  # same content, rotated order
+    await hass.async_block_till_done()
+
+    assert calls == []  # no spurious wake-up
+    assert coord.data is not None
+    assert len(coord.data.preavisos) == 2
+
+
+async def test_preavis_only_change_leaves_comarca_projections_stable(
+    hass: HomeAssistant, clock: FakeClock, make_coordinator
+) -> None:
+    """A preavis-only cycle does not regress the comarca-driven sensors.
+
+    The in-force, announced and outlook projections are what the other six
+    sensors read; adding `preavisos` to `__eq__` must not perturb them. Seed an
+    active comarca, then publish a preavis on top of the same wind warning and
+    assert every projection survives the cycle unchanged alongside the new
+    preavis.
+    """
+    wind = [episodi_raw([evolucio_raw({"12-18": [afectacio_raw(perill=3.0)]})])]
+    coord, _source = make_coordinator(
+        clock,
+        [
+            make_snapshot(wind),
+            make_snapshot(wind, preavisos=[_preavis_raw(perill=4.0)]),
+        ],
+    )
+
+    await coord.async_refresh()  # seed: one wind warning in force
+    await hass.async_block_till_done()
+    assert coord.data is not None
+    assert len(coord.data.en_vigor) == 1
+    assert coord.data.en_vigor[0].perill == 3
+
+    calls, on_update = _listener_box()
+    coord.async_add_listener(on_update)
+
+    await coord.async_refresh()  # preavis appears, the wind warning is unchanged
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert coord.data is not None
+    assert len(coord.data.preavisos) == 1
+    # The comarca projections are intact: the other sensors keep their values.
+    assert len(coord.data.en_vigor) == 1
+    assert coord.data.en_vigor[0].perill == 3

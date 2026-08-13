@@ -37,6 +37,11 @@ those documents are the contract, so read the relevant section before changing b
   change without the source changing. Keep the one-minute local recompute
   (`docs/04-architecture.md` §5) network-free.
 - Config-flow-only integration: do not reintroduce YAML (`configuration.yaml`) support.
+- Every field an entity reads must take part in `AvisoscatState.__eq__`. The coordinator runs
+  with `always_update=False`, so `async_update_listeners` fires only when the new state differs
+  by `__eq__`; a sensor reading a field `__eq__` ignores (a snapshot field, a flag) goes stale
+  until an unrelated projection moves. Add the field to `__eq__` (order-insensitively) when a
+  new entity consumes new data.
 
 ## Tests
 
