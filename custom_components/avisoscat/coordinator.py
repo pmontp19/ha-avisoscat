@@ -82,7 +82,7 @@ from .const import (
     QUOTA_INTERVAL_MINUTES_MEDIUM,
     QUOTA_MEDIUM_THRESHOLD,
 )
-from .models import SmpSnapshot
+from .models import Preavis, SmpSnapshot
 from .smp import ApiKeySource, PublicPageSource, SmpSource
 from .vigencia import (
     AfectacioProjectada,
@@ -103,17 +103,22 @@ _EmissioKey = tuple[str, str, datetime | None]
 
 @dataclass(eq=False)
 class AvisoscatState:
-    """What one cycle produced for the entities: three projections plus flags.
+    """What one cycle produced for the entities: projections plus flags.
 
-    `__eq__` compares the projections only, never `snapshot` or `last_error`,
-    so `always_update=False` wakes the entities exactly when the warnings that
-    apply changed, and never because the clock advanced or a fetch failed.
+    `__eq__` compares `en_vigor`, `anunciats`, `outlook` and `preavisos` only,
+    never `snapshot` or `last_error`, so `always_update=False` wakes the entities
+    exactly when the warnings that apply changed, and never because the clock
+    advanced or a fetch failed. `preavisos` is included because `PreavisSensor`
+    reads it directly: without it, a pre-warning published or withdrawn while a
+    comarca stays quiet would never wake that sensor, since the three projections
+    are empty on both sides of the change.
     """
 
     snapshot: SmpSnapshot | None
     en_vigor: list[AfectacioProjectada]
     anunciats: list[AfectacioProjectada]
     outlook: list[OutlookDia]
+    preavisos: tuple[Preavis, ...] = ()
     last_error: str | None = None
 
     # Unhashable on purpose: a mutable state compared by projection value, never
@@ -122,13 +127,19 @@ class AvisoscatState:
     __hash__: ClassVar[None] = None
 
     def __eq__(self, other: object) -> bool:
-        """Equal when the three projections are equal, ignoring fetch metadata."""
+        """Equal when the projections and pre-warnings match, ignoring metadata.
+
+        `preavisos` is compared as a set because the feed does not guarantee a
+        stable order for any list: a positional comparison would report a change
+        every cycle for identical content (docs/01-data-sources.md §3.1).
+        """
         if not isinstance(other, AvisoscatState):
             return NotImplemented
         return (
             self.en_vigor == other.en_vigor
             and self.anunciats == other.anunciats
             and self.outlook == other.outlook
+            and set(self.preavisos) == set(other.preavisos)
         )
 
 
@@ -384,6 +395,7 @@ class AvisoscatDataUpdateCoordinator(DataUpdateCoordinator[AvisoscatState]):
             en_vigor=en_vigor,
             anunciats=anunciats,
             outlook=outlook_grid,
+            preavisos=snapshot.preavisos,
         )
 
     def _seed(
