@@ -66,12 +66,12 @@ async def test_manifest_as_home_assistant_loads_it(hass: HomeAssistant) -> None:
 
 
 def test_sensor_platform_is_forwarded() -> None:
-    """The sensor platform is wired now that its module has landed.
+    """Both documented platforms are wired now that their modules have landed.
 
-    `binary_sensor` joins when its task lands; until then, forwarding only the
-    sensor platform keeps setup from raising on a missing module.
+    The target set of docs/04-architecture.md §9 is `BINARY_SENSOR + SENSOR`;
+    each platform joins this tuple only when its module exists.
     """
-    assert PLATFORMS == (Platform.SENSOR,)
+    assert PLATFORMS == (Platform.BINARY_SENSOR, Platform.SENSOR)
 
 
 def test_documented_endpoints_are_defined() -> None:

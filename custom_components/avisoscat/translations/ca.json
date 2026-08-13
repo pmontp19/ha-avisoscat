@@ -51,6 +51,20 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "avis_actiu": {
+        "name": "Avís actiu"
+      },
+      "avis_greu": {
+        "name": "Avís greu"
+      },
+      "avis_greu_anunciat": {
+        "name": "Avís greu anunciat"
+      },
+      "temps_violent": {
+        "name": "Temps violent"
+      }
+    },
     "sensor": {
       "warning_level": {
         "name": "Nivell d'avís",

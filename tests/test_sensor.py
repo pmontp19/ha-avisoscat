@@ -488,7 +488,10 @@ async def test_async_setup_entry_creates_seven_sensors(
 
     ent_reg = er.async_get(hass)
     entities = er.async_entries_for_config_entry(ent_reg, entry.entry_id)
-    assert len(entities) == 7
+    # The binary_sensor platform also forwards under the same entry, so the
+    # sensor count is the slice whose domain is `sensor`.
+    sensors = [e for e in entities if e.domain == "sensor"]
+    assert len(sensors) == 7
 
     # unique_id is `{entry_id}_{translation_key}`; the translation keys are the
     # stable contract, so they are what the assertion is anchored against.
@@ -504,7 +507,7 @@ async def test_async_setup_entry_creates_seven_sensors(
     # `unique_id` is `{entry_id}_{translation_key}`, and translation keys
     # themselves contain underscores, so each unique_id is matched by suffix.
     seen_keys: set[str] = set()
-    for entity in entities:
+    for entity in sensors:
         for key in expected_keys:
             if entity.unique_id.endswith(f"_{key}"):
                 seen_keys.add(key)
