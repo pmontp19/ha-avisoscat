@@ -11,10 +11,11 @@
 ![CI](https://github.com/pmontp19/ha-avisoscat/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/github/license/pmontp19/ha-avisoscat)
 
-> 📌 **HACS default pendent.** Aquesta integració encara no és al repositori
-> *default* de HACS: la sol·licitud d'alta és una follow-up task (cal una PR/issue a
-> [`hacs/default`](https://github.com/hacs/default)). Mentre tant, s'instal·la com a
-> *repositori personalitzat* (vegeu més avall).
+> 📌 **Instal·lació via repositori personalitzat.** Aquesta integració s'instal·la
+> afegint-la com a *repositori personalitzat* a HACS (instruccions a sota). La inclusió
+> al repositori *default* de HACS queda com a possible futur, però la revisió d'una PR a
+> [`hacs/default`](https://github.com/hacs/default) pot trigar mesos; el repositori
+> personalitzat és la via primària avui.
 
 ## Què és un avís SMP, i què no és
 
@@ -52,11 +53,17 @@ Dues conseqüències que cal tenir presents:
 
 ### Via HACS (recomanat)
 
-1. HACS → **Integrations** → menú (⋮) → **Custom repositories**.
-2. Afegiu `https://github.com/pmontp19/ha-avisoscat`, categoria **Integration**.
-3. Cerqueu **"Avisos Meteocat"** dins HACS i instal·leu-la.
-4. Reinicieu Home Assistant.
-5. **Configuració → Dispositius i serveis → Afegeix integració** → cerqueu **"Avisos Meteocat"**.
+1. Obriu **HACS** al panell lateral de Home Assistant.
+2. Aneu a **Settings** → **Custom repositories** (en versions anteriors de HACS: menú ⋮
+   → **Custom repositories**).
+3. Al camp de text, enganxeu `https://github.com/pmontp19/ha-avisoscat`.
+4. Al desplegable **Category**, seleccioneu **Integration**.
+5. Premeu **Add**.
+6. Torneu a la pestanya d'integracions de HACS, cerqueu **"Avisos Meteocat"** i premeu
+   **Install**.
+7. **Reinicieu** Home Assistant.
+8. Aneu a **Configuració → Dispositius i serveis → Afegeix integració**, cerqueu
+   **"Avisos Meteocat"** i seguiu el flux de configuració.
 
 ### Manual
 
