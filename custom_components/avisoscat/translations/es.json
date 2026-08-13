@@ -55,6 +55,10 @@
         "data_description": {
           "id_comarca": "El identificador único de la entrada no cambia, de modo que las entidades que sobreviven conservan el historial."
         }
+      },
+      "low_quota_warning": {
+        "title": "Cuota insuficiente para el nowcast de tiempo violento",
+        "description": "El plan de esta clave consulta la fuente como mucho cada 8 h, por lo que los avisos de tiempo violento (que duran unas 2 h) no llegarán a tiempo. Considera quitar la clave y usar la fuente pública sin clave, que consulta cada 10 min durante los episodios convectivos. Confirma para mantener la clave de todos modos."
       }
     },
     "error": {
@@ -68,6 +72,12 @@
       "already_configured": "Esta comarca ya está configurada.",
       "reauth_successful": "La clave API se ha actualizado correctamente.",
       "reconfigure_successful": "La comarca se ha actualizado correctamente."
+    }
+  },
+  "issues": {
+    "service_degraded": {
+      "title": "La fuente de Meteocat no responde",
+      "description": "La integración avisoscat de {comarca} (id {id_comarca}) ha fallado varias veces seguidas al contactar con la fuente de Meteocat. Se mantiene el último estado conocido de los avisos, pero puede estar desactualizado. Comprueba el estado del servicio de Meteocat y la conexión de red."
     }
   },
   "entity": {

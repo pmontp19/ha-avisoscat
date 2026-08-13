@@ -313,7 +313,7 @@ async def test_api_key_validated_and_stored(hass: HomeAssistant) -> None:
     with (
         patch(
             "custom_components.avisoscat.config_flow.async_validate_api_key",
-            return_value=None,
+            return_value=(None, None),
         ) as mock_validate,
         aioresponses() as mocked,
     ):
@@ -341,7 +341,7 @@ async def test_invalid_api_key_reshows_options(hass: HomeAssistant) -> None:
     with (
         patch(
             "custom_components.avisoscat.config_flow.async_validate_api_key",
-            return_value="invalid_auth",
+            return_value=("invalid_auth", None),
         ),
         aioresponses() as mocked,
     ):
@@ -470,7 +470,13 @@ async def test_options_flow_coastal_offers_include_sea(hass: HomeAssistant) -> N
 async def test_validate_api_key_outcomes(
     hass: HomeAssistant, raised: Exception | None, expected: str | None
 ) -> None:
-    """A 403 is invalid_auth; any fetch failure is cannot_connect; else valid."""
+    """A 403 is invalid_auth; any fetch failure is cannot_connect; else valid.
+
+    The function returns ``(error, quota_info)``: the error key drives the
+    form, and the quota info rides along so the caller can warn about a
+    citizen plan without a second request. `quota_info` is `None` for every
+    failure path and for the no-plan success path the fake produces here.
+    """
 
     class _FakeSource:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -481,7 +487,10 @@ async def test_validate_api_key_outcomes(
                 raise raised
 
     with patch.object(config_flow, "ApiKeySource", _FakeSource):
-        assert await config_flow.async_validate_api_key(hass, "any-key") == expected
+        assert await config_flow.async_validate_api_key(hass, "any-key") == (
+            expected,
+            None,
+        )
 
 
 # ---------------------------------------------------------------------------

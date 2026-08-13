@@ -55,6 +55,10 @@
         "data_description": {
           "id_comarca": "L'identificador únic de l'entrada no canvia, de manera que les entitats que sobreviuen conserven l'historial."
         }
+      },
+      "low_quota_warning": {
+        "title": "Quota insuficient per al nowcast de temps violent",
+        "description": "El pla d'aquesta clau consulta la font com a molt cada 8 h, de manera que els avisos de temps violent (que duren unes 2 h) no arribaran a temps. Penseu a treure la clau i fer servir la font pública sense clau, que consulta cada 10 min durant els episodis convectius. Confirmeu per mantenir la clau igualment."
       }
     },
     "error": {
@@ -68,6 +72,12 @@
       "already_configured": "Aquesta comarca ja està configurada.",
       "reauth_successful": "La clau API s'ha actualitzat correctament.",
       "reconfigure_successful": "La comarca s'ha actualitzat correctament."
+    }
+  },
+  "issues": {
+    "service_degraded": {
+      "title": "La font de Meteocat no respon",
+      "description": "La integració avisoscat de {comarca} (id {id_comarca}) ha fallat diverses vegades seguides en contactar amb la font de Meteocat. Es manté l'últim estat conegut dels avisos, però pot estar desactualitzat. Comproveu l'estat del servei de Meteocat i la connexió de xarxa."
     }
   },
   "entity": {
