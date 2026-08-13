@@ -55,6 +55,10 @@ validation.
 Three validation facts worth knowing before you debug them again:
 
 - hassfest rejects `config_flow: true` without a `config_flow.py` defining the flow handler.
+- `tests/test_translations.py` is the local parity gate for the rule above about translation
+  keys: it asserts `strings.json` and `translations/{ca,es,en}.json` share the exact same
+  deep keys and that every code-referenced key exists, so a missing translation fails in
+  milliseconds instead of waiting for `validate.yml`.
 - HACS validation checks repository metadata too (topics, description, license, issues
   enabled), not just the files in this repo.
 - `ruff format` also formats the Python inside Markdown fences, so a code sketch added to
