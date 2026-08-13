@@ -478,8 +478,13 @@ async def test_entity_wires_device_info_and_unique_id(
 async def test_async_setup_entry_creates_seven_sensors(
     hass: HomeAssistant, quiet_source: FakeSource
 ) -> None:
-    """`async_setup_entry` adds the seven level sensors of one comarca."""
-    entry = make_config_entry()
+    """`async_setup_entry` adds the seven aggregate level sensors of one comarca.
+
+    The per-meteor sensors (§3.5) are created on top of these seven and have
+    their own creation tests; this one isolates the aggregates by deselecting
+    every meteor, so the count stays at seven.
+    """
+    entry = make_config_entry(options={"meteors": []})
     entry.add_to_hass(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id)

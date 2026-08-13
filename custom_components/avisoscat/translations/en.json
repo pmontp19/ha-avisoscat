@@ -152,6 +152,96 @@
           "alt": "High",
           "molt_alt": "Very high"
         }
+      },
+      "warning_wind": {
+        "name": "Wind warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_rain_30min": {
+        "name": "Rain warning (30 min)",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_rain_3h": {
+        "name": "Rain warning (3 h)",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_rain_accumulated": {
+        "name": "Accumulated rain warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_snow": {
+        "name": "Snow warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_sea": {
+        "name": "Sea state warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_cold": {
+        "name": "Cold warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_heat": {
+        "name": "Heat warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_night_heat": {
+        "name": "Night heat warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
+      },
+      "warning_violent_weather": {
+        "name": "Violent weather warning",
+        "state": {
+          "cap": "None",
+          "moderat": "Moderate",
+          "alt": "High",
+          "molt_alt": "Very high"
+        }
       }
     }
   },

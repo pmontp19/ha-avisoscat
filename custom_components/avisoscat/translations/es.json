@@ -152,6 +152,96 @@
           "alt": "Alto",
           "molt_alt": "Muy alto"
         }
+      },
+      "warning_wind": {
+        "name": "Aviso de viento",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_rain_30min": {
+        "name": "Aviso de lluvia (30 min)",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_rain_3h": {
+        "name": "Aviso de lluvia (3 h)",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_rain_accumulated": {
+        "name": "Aviso de lluvia acumulada",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_snow": {
+        "name": "Aviso de nieve",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_sea": {
+        "name": "Aviso de estado del mar",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_cold": {
+        "name": "Aviso de frío",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_heat": {
+        "name": "Aviso de calor",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_night_heat": {
+        "name": "Aviso de calor nocturno",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
+      },
+      "warning_violent_weather": {
+        "name": "Aviso de tiempo violento",
+        "state": {
+          "cap": "Ninguno",
+          "moderat": "Moderado",
+          "alt": "Alto",
+          "molt_alt": "Muy alto"
+        }
       }
     }
   },
