@@ -28,9 +28,11 @@ from .const import DOMAIN
 
 # Target set is BINARY_SENSOR + SENSOR (docs/04-architecture.md §9). Each
 # platform is wired only when its module exists: forwarding a config entry to a
-# platform with no module raises and would make the integration unloadable, so
-# `binary_sensor` joins this tuple when its task lands.
-PLATFORMS: tuple[Platform, ...] = (Platform.SENSOR,)
+# platform with no module raises and would make the integration unloadable.
+PLATFORMS: tuple[Platform, ...] = (
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+)
 
 # The coordinator a config entry carries on its `runtime_data`. Typing the entry
 # this way gives every platform `entry.runtime_data` already typed as the

@@ -51,6 +51,20 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "avis_actiu": {
+        "name": "Active warning"
+      },
+      "avis_greu": {
+        "name": "Severe warning"
+      },
+      "avis_greu_anunciat": {
+        "name": "Announced severe warning"
+      },
+      "temps_violent": {
+        "name": "Violent weather"
+      }
+    },
     "sensor": {
       "warning_level": {
         "name": "Warning level",
