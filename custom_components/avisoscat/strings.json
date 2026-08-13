@@ -55,6 +55,10 @@
         "data_description": {
           "id_comarca": "The unique id of the entry does not change, so entities that survive the move keep their history."
         }
+      },
+      "low_quota_warning": {
+        "title": "Quota too low for violent-weather nowcasts",
+        "description": "This API key's plan queries the feed at most once every 8 h, so violent-weather nowcasts (which last about 2 h) will not arrive in time. Consider removing the key and using the keyless public source, which polls every 10 min during convective episodes. Submit to keep the key anyway."
       }
     },
     "error": {
@@ -68,6 +72,12 @@
       "already_configured": "This comarca is already configured.",
       "reauth_successful": "The API key was updated successfully.",
       "reconfigure_successful": "The comarca was updated successfully."
+    }
+  },
+  "issues": {
+    "service_degraded": {
+      "title": "Meteocat source is not responding",
+      "description": "The avisoscat integration for {comarca} (id {id_comarca}) has failed to reach the Meteocat feed several times in a row. The last known warnings are still shown, but they may be stale. Check the Meteocat service status and your network connection."
     }
   },
   "entity": {

@@ -266,7 +266,7 @@ async def test_reauth_flow_accepts_a_new_key_and_reloads(
     with (
         patch(
             "custom_components.avisoscat.config_flow.async_validate_api_key",
-            new=AsyncMock(return_value=None),
+            new=AsyncMock(return_value=(None, None)),
         ) as mock_validate,
         patch.object(hass.config_entries, "async_reload", new=reload_mock),
     ):
@@ -295,7 +295,7 @@ async def test_reauth_flow_rejects_a_blank_key(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.avisoscat.config_flow.async_validate_api_key",
-        new=AsyncMock(return_value=None),
+        new=AsyncMock(return_value=(None, None)),
     ) as mock_validate:
         result = await start_reauth_flow(hass, entry)
         result = await hass.config_entries.flow.async_configure(
@@ -318,7 +318,7 @@ async def test_reauth_flow_rejects_an_invalid_key(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.avisoscat.config_flow.async_validate_api_key",
-        new=AsyncMock(return_value="invalid_auth"),
+        new=AsyncMock(return_value=("invalid_auth", None)),
     ):
         result = await start_reauth_flow(hass, entry)
         result = await hass.config_entries.flow.async_configure(
@@ -340,7 +340,7 @@ async def test_reauth_flow_propagates_cannot_connect_as_form_error(
 
     with patch(
         "custom_components.avisoscat.config_flow.async_validate_api_key",
-        new=AsyncMock(return_value="cannot_connect"),
+        new=AsyncMock(return_value=("cannot_connect", None)),
     ):
         result = await start_reauth_flow(hass, entry)
         result = await hass.config_entries.flow.async_configure(

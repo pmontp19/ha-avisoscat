@@ -84,6 +84,27 @@ MAX_SCAN_INTERVAL_MINUTES = 120
 DEGRADED_FAILURE_THRESHOLD = 3
 
 # ---------------------------------------------------------------------------
+# Quota-driven polling (docs/03-feature-spec.md §6, "Amb API key")
+#
+# When an API key is present the user's plan, not the adaptive 30/10 min logic,
+# sets the cadence: a citizen key (~100/month) cannot serve the 10 min nowcast
+# cadence, so the interval is widened to keep the month inside the plan. The
+# bands come straight from the spec and map `maxConsultes` of the
+# "Dades de Predicció" plan to a polling interval.
+# ---------------------------------------------------------------------------
+
+QUOTA_HIGH_THRESHOLD = 500
+QUOTA_MEDIUM_THRESHOLD = 200
+QUOTA_INTERVAL_MINUTES_HIGH = 30
+QUOTA_INTERVAL_MINUTES_MEDIUM = 120
+QUOTA_INTERVAL_MINUTES_LOW = 480
+
+# `maxConsultes` at or below this value trips the config-flow warning: the
+# nowcast horizon (2 h) cannot be served by the resulting 8 h interval, so the
+# user is told upfront to prefer the keyless public source for temps violent.
+LOW_QUOTA_WARNING_THRESHOLD = QUOTA_MEDIUM_THRESHOLD
+
+# ---------------------------------------------------------------------------
 # Config entry data keys (docs/03-feature-spec.md §2)
 #
 # `api_key` lives in `entry.data`, never in `entry.options`: it is rotated
@@ -109,12 +130,11 @@ CONF_SCAN_INTERVAL = "scan_interval"
 #
 # Fired on `hass.bus` for `trigger: event` automations. Each covers one of the
 # two horizons of §1.1: `*_announced` is the planning signal (hours to days),
-# `*_started`/`_upgraded`/`_downgraded`/`_cleared` are the in-force signals, and
-# `*_violent_weather` is the only genuinely real-time one. The schemas live in
-# `coordinator.py`'s payload builders; this module only names the types.
-#
-# `avisoscat_service_degraded` is part of the same contract but its firing
-# (persistent failure threshold) is a later task, so it is not declared here yet.
+# `*_started`/`_upgraded`/`_downgraded`/`_cleared` are the in-force signals,
+# `*_violent_weather` is the only genuinely real-time one, and
+# `*_service_degraded` fires once when the source has failed persistently
+# (docs/04-architecture.md §10). The schemas live in `coordinator.py`'s
+# payload builders; this module only names the types.
 # ---------------------------------------------------------------------------
 
 EVENT_WARNING_ANNOUNCED = f"{DOMAIN}_warning_announced"
@@ -123,6 +143,19 @@ EVENT_WARNING_UPGRADED = f"{DOMAIN}_warning_upgraded"
 EVENT_WARNING_DOWNGRADED = f"{DOMAIN}_warning_downgraded"
 EVENT_WARNING_CLEARED = f"{DOMAIN}_warning_cleared"
 EVENT_VIOLENT_WEATHER = f"{DOMAIN}_violent_weather"
+EVENT_SERVICE_DEGRADED = f"{DOMAIN}_service_degraded"
+
+# ---------------------------------------------------------------------------
+# Repair issues (docs/04-architecture.md §10)
+#
+# Raised through `issue_registry.async_create_issue` so the user gets a native
+# "something is wrong, click here" prompt. `learn_more_url` points at the
+# project documentation; the per-issue translation key lives under `issues.*`
+# in `strings.json` and the three translation files.
+# ---------------------------------------------------------------------------
+
+ISSUE_SERVICE_DEGRADED = "service_degraded"
+LEARN_MORE_URL = "https://github.com/pmontp19/ha-avisoscat"
 
 # Danger grade (0-6) at or above which `binary_sensor.severe_warning` turns on.
 # 3 is the official "Alt" band (docs/03-feature-spec.md §2).

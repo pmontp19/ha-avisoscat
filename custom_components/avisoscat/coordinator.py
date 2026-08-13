@@ -45,6 +45,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.issue_registry import (
+    IssueSeverity,
+    async_create_issue,
+    async_delete_issue,
+)
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -58,15 +63,24 @@ from .const import (
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL_ACTIVE_MINUTES,
     DEFAULT_SCAN_INTERVAL_IDLE_MINUTES,
+    DEGRADED_FAILURE_THRESHOLD,
     DOMAIN,
+    EVENT_SERVICE_DEGRADED,
     EVENT_VIOLENT_WEATHER,
     EVENT_WARNING_ANNOUNCED,
     EVENT_WARNING_CLEARED,
     EVENT_WARNING_DOWNGRADED,
     EVENT_WARNING_STARTED,
     EVENT_WARNING_UPGRADED,
+    ISSUE_SERVICE_DEGRADED,
+    LEARN_MORE_URL,
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
+    QUOTA_HIGH_THRESHOLD,
+    QUOTA_INTERVAL_MINUTES_HIGH,
+    QUOTA_INTERVAL_MINUTES_LOW,
+    QUOTA_INTERVAL_MINUTES_MEDIUM,
+    QUOTA_MEDIUM_THRESHOLD,
 )
 from .models import SmpSnapshot
 from .smp import ApiKeySource, PublicPageSource, SmpSource
@@ -133,6 +147,21 @@ def build_source(hass: HomeAssistant, entry: ConfigEntry) -> SmpSource:
     return PublicPageSource(session)
 
 
+def interval_for_quota(max_consultes: int) -> timedelta:
+    """The polling interval a given monthly quota dictates (§6, "Amb API key").
+
+    Bands mirror the spec: `> 500` keeps the 30 min public cadence, `200-500`
+    widens to 2 h, and `<= 200` (the citizen plan, where `maxConsultes` sits at
+    ~100) widens to 8 h. The 8 h floor is what makes the 2 h violent-nowcast
+    horizon unservable on a citizen key, which the config flow warns about.
+    """
+    if max_consultes > QUOTA_HIGH_THRESHOLD:
+        return timedelta(minutes=QUOTA_INTERVAL_MINUTES_HIGH)
+    if max_consultes > QUOTA_MEDIUM_THRESHOLD:
+        return timedelta(minutes=QUOTA_INTERVAL_MINUTES_MEDIUM)
+    return timedelta(minutes=QUOTA_INTERVAL_MINUTES_LOW)
+
+
 class AvisoscatDataUpdateCoordinator(DataUpdateCoordinator[AvisoscatState]):
     """Holds one comarca's snapshot and fires the events its changes imply."""
 
@@ -164,10 +193,59 @@ class AvisoscatDataUpdateCoordinator(DataUpdateCoordinator[AvisoscatState]):
         # `upgraded` / `downgraded` / `cleared` diff against.
         self._in_force: dict[str, AfectacioProjectada] = {}
         self._initialised = False
+        # Resilience bookkeeping (docs/04-architecture.md §10): how many
+        # fetches in a row have failed, and whether the single
+        # `avisoscat_service_degraded` event for the current streak has
+        # already fired. Reset to this state on the next successful fetch.
+        self._consecutive_failures = 0
+        self._degraded_announced = False
+        # Quota-driven interval (docs/03-feature-spec.md §6, "Amb API key"):
+        # populated once on the first successful fetch with an API-key source,
+        # after which it overrides the adaptive 30/10 min cadence. `None` for
+        # the keyless public source, which stays on the adaptive logic.
+        self._quota_interval: timedelta | None = None
+        self._quota_checked = False
 
     # ------------------------------------------------------------------
     # Fetch
     # ------------------------------------------------------------------
+
+    @property
+    def consecutive_failures(self) -> int:
+        """How many fetches in a row have failed (docs/04-architecture.md §10).
+
+        Read-only exposure for diagnostics: the diagnostic download surfaces
+        the streak without giving callers a way to mutate it.
+        """
+        return self._consecutive_failures
+
+    @property
+    def degraded_announced(self) -> bool:
+        """Whether `avisoscat_service_degraded` has fired for this streak.
+
+        Read-only exposure for diagnostics: distinguishes a streak that is
+        still under the threshold from one the user has already been told
+        about.
+        """
+        return self._degraded_announced
+
+    @property
+    def quota_interval(self) -> timedelta | None:
+        """The quota-driven poll interval, or `None` for the public source.
+
+        Read-only exposure for diagnostics: reports the cadence a citizen
+        quota dictates when an API-key source is in use.
+        """
+        return self._quota_interval
+
+    @property
+    def source_kind(self) -> str:
+        """The class name of the SMP source the coordinator fetches from.
+
+        Used by diagnostics to distinguish `ApiKeySource` from
+        `PublicPageSource` without exposing the source object itself.
+        """
+        return type(self._source).__name__
 
     async def _async_update_data(self) -> AvisoscatState:
         """Fetch one snapshot and fold it into a fresh state.
@@ -181,23 +259,89 @@ class AvisoscatDataUpdateCoordinator(DataUpdateCoordinator[AvisoscatState]):
         try:
             snapshot = await self._source.fetch()
         except ConfigEntryAuthFailed:
+            # An auth failure is not "service degraded": the key is wrong, not
+            # the source, and HA's own reauth flow is the right answer. It must
+            # neither count towards the degradation threshold nor fire the
+            # repair issue.
             raise
         except UpdateFailed as err:
-            self._record_error(err)
+            self._record_failure(err)
             raise
         except Exception as err:
             # Defensive: the source contract is UpdateFailed |
             # ConfigEntryAuthFailed, but an escape is still a fetch failure,
             # recorded and wrapped so the coordinator degrades rather than
             # crashing the refresh.
-            self._record_error(err)
+            self._record_failure(err)
             raise UpdateFailed("Unexpected error fetching the SMP feed") from err
+
+        # A successful fetch ends any standing degradation streak and reopens
+        # the door to the next one. The quota check is best-effort: quota is
+        # diagnostic, not load-bearing, so a failure to read it never fails
+        # the fetch that just succeeded.
+        self._on_fetch_success()
+        await self._maybe_apply_quota_interval()
         return self._apply(snapshot)
 
-    def _record_error(self, err: Exception) -> None:
-        """Stamp the failure onto the last good state, which HA then retains."""
+    def _record_failure(self, err: Exception) -> None:
+        """Count the failure and fire `service_degraded` when it persists.
+
+        Wraps `_record_error`'s old "stamp `last_error` onto the last good
+        state" with the resilience bookkeeping: every fetch failure increments
+        the consecutive counter, and once it reaches the documented threshold a
+        single `avisoscat_service_degraded` event and a matching repair issue
+        are produced. The fourth failure does not repeat either: the
+        `_degraded_announced` flag stays set until a successful fetch clears
+        the streak (docs/04-architecture.md §10).
+        """
         if self.data is not None:
             self.data.last_error = str(err) or type(err).__name__
+        self._consecutive_failures += 1
+        if (
+            self._consecutive_failures >= DEGRADED_FAILURE_THRESHOLD
+            and not self._degraded_announced
+        ):
+            self._announce_degraded()
+
+    def _on_fetch_success(self) -> None:
+        """Reset the failure streak and clear any standing repair issue."""
+        self._consecutive_failures = 0
+        if self._degraded_announced:
+            self._degraded_announced = False
+            async_delete_issue(self.hass, DOMAIN, ISSUE_SERVICE_DEGRADED)
+
+    def _announce_degraded(self) -> None:
+        """Fire the degraded event once and create the matching repair issue.
+
+        The event carries the count and the last error so a `trigger: event`
+        automation can branch on the failure mode; the repair issue is what
+        surfaces the problem to a user who has no such automation, with a
+        `learn_more_url` that points at the project's documentation.
+        """
+        self._degraded_announced = True
+        self._fire(
+            EVENT_SERVICE_DEGRADED,
+            {
+                "comarca": self._comarca_nom,
+                "id_comarca": self._id_comarca,
+                "consecutive_failures": self._consecutive_failures,
+                "last_error": self.data.last_error if self.data is not None else None,
+            },
+        )
+        async_create_issue(
+            self.hass,
+            domain=DOMAIN,
+            issue_id=ISSUE_SERVICE_DEGRADED,
+            is_fixable=False,
+            issue_domain=DOMAIN,
+            learn_more_url=LEARN_MORE_URL,
+            severity=IssueSeverity.WARNING,
+            translation_key=ISSUE_SERVICE_DEGRADED,
+            translation_placeholders={
+                "comarca": self._comarca_nom,
+                "id_comarca": str(self._id_comarca),
+            },
+        )
 
     # ------------------------------------------------------------------
     # Projection + emission, shared by the fetch and the minute recompute
@@ -350,9 +494,18 @@ class AvisoscatDataUpdateCoordinator(DataUpdateCoordinator[AvisoscatState]):
         return (af.meteor_nom, af.tipus_nom, af.data_emissio)
 
     def _update_interval_for(self, active: bool) -> None:
-        """Set the poll cadence: the configured fixed interval, else adaptive."""
+        """Set the poll cadence in the priority order fixed > quota > adaptive.
+
+        A user-chosen fixed interval always wins. With an API key, the
+        quota-driven interval (§6, "Amb API key") comes next: a citizen plan
+        cannot honour the 10 min nowcast cadence, so the interval widens to
+        keep the month inside the quota. The adaptive 30/10 min logic is the
+        default for the keyless public source.
+        """
         if self._fixed_interval is not None:
             target = self._fixed_interval
+        elif self._quota_interval is not None:
+            target = self._quota_interval
         elif active:
             target = timedelta(minutes=DEFAULT_SCAN_INTERVAL_ACTIVE_MINUTES)
         else:
@@ -361,6 +514,27 @@ class AvisoscatDataUpdateCoordinator(DataUpdateCoordinator[AvisoscatState]):
         # refresh boundary, never mid-cycle.
         if self.update_interval != target:
             self.update_interval = target
+
+    async def _maybe_apply_quota_interval(self) -> None:
+        """Read the API quota once and pin the poll interval to it (§6).
+
+        Runs only on the first successful fetch and only when the source is the
+        API-key client: the public source has no quota and stays on the
+        adaptive 30/10 min logic. A failed quota read is silent: the quota
+        sensor is a diagnostic, not a load-bearing input, so the integration
+        keeps working on the adaptive cadence when it cannot be read.
+        """
+        if self._quota_checked or not isinstance(self._source, ApiKeySource):
+            return
+        self._quota_checked = True
+        try:
+            quota = await self._source.fetch_quota()
+        except Exception:
+            # Quota is diagnostic, never worth failing the fetch over.
+            return
+        if quota is None or quota.max_consultes is None:
+            return
+        self._quota_interval = interval_for_quota(quota.max_consultes)
 
     @staticmethod
     def _fixed_interval(entry: ConfigEntry) -> timedelta | None:

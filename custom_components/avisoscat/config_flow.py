@@ -72,11 +72,12 @@ from .const import (
     DEFAULT_INCLUDE_SEA,
     DEFAULT_SEVERE_THRESHOLD,
     DOMAIN,
+    LOW_QUOTA_WARNING_THRESHOLD,
     MAX_SCAN_INTERVAL_MINUTES,
     MIN_SCAN_INTERVAL_MINUTES,
 )
 from .models import Meteor
-from .smp import ApiKeySource
+from .smp import ApiKeySource, QuotaInfo
 
 __all__ = ["AvisoscatConfigFlow", "AvisoscatOptionsFlow", "async_validate_api_key"]
 
@@ -223,24 +224,43 @@ def _options_schema(
     return vol.Schema(fields)
 
 
-async def async_validate_api_key(hass: HomeAssistant, api_key: str) -> str | None:
+async def async_validate_api_key(
+    hass: HomeAssistant, api_key: str
+) -> tuple[str | None, QuotaInfo | None]:
     """Validate a Meteocat API key against the quota endpoint.
 
-    Returns a config-flow error key, or `None` when the key is accepted. The
-    check reuses the live `ApiKeySource` so the config flow and the runtime
-    agree on what a valid key is: a `403` is `invalid_auth`, and anything else
-    that prevents a clean answer (quota exhausted, network) is `cannot_connect`.
-    A response with no recognisable plan still counts as valid, because the
-    request returned `200`; the quota sensor simply has nothing to show.
+    Returns a ``(config-flow error key, quota_info)`` pair. The error key is
+    `None` when the key is accepted, and the quota info is whatever the
+    endpoint returned alongside the validation, so the caller can warn about a
+    low-citizen plan without re-fetching. The check reuses the live
+    `ApiKeySource` so the config flow and the runtime agree on what a valid
+    key is: a `403` is `invalid_auth`, and anything else that prevents a clean
+    answer (quota exhausted, network) is `cannot_connect`. A response with no
+    recognisable plan still counts as valid, because the request returned
+    `200`; the quota sensor simply has nothing to show.
     """
-    session = async_get_clientsession(hass)
+    source = ApiKeySource(async_get_clientsession(hass), api_key)
     try:
-        await ApiKeySource(session, api_key).fetch_quota()
+        quota_info = await source.fetch_quota()
     except ConfigEntryAuthFailed:
-        return "invalid_auth"
+        return "invalid_auth", None
     except UpdateFailed:
-        return "cannot_connect"
-    return None
+        return "cannot_connect", None
+    return None, quota_info
+
+
+def _is_low_quota(quota_info: QuotaInfo | None) -> bool:
+    """Whether a validated key's plan is too small for the nowcast cadence.
+
+    The threshold is the spec's `<= 200` band (docs/03-feature-spec.md §6):
+    below it the polling interval widens to 8 h, which cannot serve the 2 h
+    violent-nowcast horizon. A `None` quota (no recognisable plan in the
+    response) is treated as not-low: the request returned `200`, so the key is
+    valid, and there is no value to warn about.
+    """
+    if quota_info is None or quota_info.max_consultes is None:
+        return False
+    return quota_info.max_consultes <= LOW_QUOTA_WARNING_THRESHOLD
 
 
 class AvisoscatConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -256,6 +276,11 @@ class AvisoscatConfigFlow(ConfigFlow, domain=DOMAIN):
         self._location_error: str | None = None
         # Last options-form input, kept so a validation error does not wipe it.
         self._options_input: dict[str, Any] = {}
+        # Built ``(data, options)`` for the entry that is waiting on the
+        # low-quota confirmation step. Populated by `async_step_options` when
+        # the validated API key sits on a citizen plan, consumed by
+        # `async_step_low_quota_warning` once the user confirms.
+        self._pending_entry: dict[str, dict[str, Any]] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -300,29 +325,33 @@ class AvisoscatConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_options(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Collect the step 2 options, validating the API key when one is given."""
+        """Collect the step 2 options, validating the API key when one is given.
+
+        A validated key on a citizen plan (`maxConsultes` at or below the
+        documented threshold) does not create the entry directly: the resulting
+        8 h interval cannot serve the 2 h violent-nowcast horizon, so the user
+        is sent to `async_step_low_quota_warning` to confirm they understand
+        before the entry is committed.
+        """
         assert self._id_comarca is not None
         errors: dict[str, str] = {}
 
         if user_input is not None:
             self._options_input = user_input
             api_key = (user_input.get(CONF_API_KEY) or "").strip()
+            quota_info: QuotaInfo | None = None
             if api_key:
-                error = await async_validate_api_key(self.hass, api_key)
+                error, quota_info = await async_validate_api_key(self.hass, api_key)
                 if error is not None:
                     errors[CONF_API_KEY] = error
 
             if not errors:
-                data: dict[str, Any] = {CONF_ID_COMARCA: self._id_comarca}
-                if api_key:
-                    data[CONF_API_KEY] = api_key
-                options = {
-                    CONF_METEORS: user_input[CONF_METEORS],
-                    CONF_SEVERE_THRESHOLD: user_input[CONF_SEVERE_THRESHOLD],
-                    CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL),
-                }
-                if id_mar(self._id_comarca) is not None:
-                    options[CONF_INCLUDE_SEA] = user_input[CONF_INCLUDE_SEA]
+                data, options = self._build_entry_data(user_input, api_key)
+                if _is_low_quota(quota_info):
+                    # Park the built entry and ask the user to confirm they
+                    # accept the slow cadence before committing.
+                    self._pending_entry = {"data": data, "options": options}
+                    return await self.async_step_low_quota_warning()
                 return self.async_create_entry(
                     title=_entry_title(self._id_comarca), data=data, options=options
                 )
@@ -336,6 +365,52 @@ class AvisoscatConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+    async def async_step_low_quota_warning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm the user accepts the citizen-plan polling cadence.
+
+        The 8 h interval a citizen quota dictates (§6) cannot serve the 2 h
+        violent-nowcast horizon: by the time an update arrives, the nowcast is
+        already over. The keyless public source can, so this step makes the
+        trade-off explicit before the entry is committed. Submitting confirms;
+        the abort path sends the user back to the options form to drop the key.
+        """
+        if user_input is not None:
+            pending = self._pending_entry
+            return self.async_create_entry(
+                title=_entry_title(self._id_comarca),
+                data=pending["data"],
+                options=pending["options"],
+            )
+        return self.async_show_form(
+            step_id="low_quota_warning",
+            data_schema=vol.Schema({}),
+            description_placeholders=None,
+        )
+
+    def _build_entry_data(
+        self, user_input: dict[str, Any], api_key: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Split the validated form input into the entry's `data` and `options`.
+
+        Centralised so the options step and the low-quota confirmation step
+        build the exact same entry: the pending dict the confirmation step
+        commits is produced here, never reassembled at the call site.
+        """
+        assert self._id_comarca is not None
+        data: dict[str, Any] = {CONF_ID_COMARCA: self._id_comarca}
+        if api_key:
+            data[CONF_API_KEY] = api_key
+        options: dict[str, Any] = {
+            CONF_METEORS: user_input[CONF_METEORS],
+            CONF_SEVERE_THRESHOLD: user_input[CONF_SEVERE_THRESHOLD],
+            CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL),
+        }
+        if id_mar(self._id_comarca) is not None:
+            options[CONF_INCLUDE_SEA] = user_input[CONF_INCLUDE_SEA]
+        return data, options
 
     async def _select_comarca(self, id_comarca: int) -> ConfigFlowResult:
         """Fix the comarca, guard against duplicates, and move to options.
@@ -385,7 +460,7 @@ class AvisoscatConfigFlow(ConfigFlow, domain=DOMAIN):
             if not api_key:
                 errors[CONF_API_KEY] = "api_key_required"
             else:
-                error = await async_validate_api_key(self.hass, api_key)
+                error, _quota_info = await async_validate_api_key(self.hass, api_key)
                 if error is not None:
                     errors[CONF_API_KEY] = error
 
