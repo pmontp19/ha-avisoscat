@@ -36,3 +36,6 @@ htmlcov/
 .HA_VERSION
 home-assistant.log*
 .storage/
+
+# Local E2E evidence instance (tokens, secrets)
+.ha-evidence/
