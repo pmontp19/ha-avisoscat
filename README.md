@@ -17,6 +17,29 @@
 > [`hacs/default`](https://github.com/hacs/default) pot trigar mesos; el repositori
 > personalitzat és la via primària avui.
 
+## Captures
+
+D'una instància real: flux de configuració, dispositiu i entitats amb dades en directe de
+meteo.cat (comarca de la Noguera), i el blueprint de notificació.
+
+![Passa d'ubicació del flux de configuració](docs/screenshots/config-flow-location.png)
+*Primera passa: un marcador al mapa, preomplert amb la ubicació de casa, que es resol localment a comarca.*
+
+![Desplegable de comarques del flux de configuració](docs/screenshots/config-flow-comarca.png)
+*Si el marcador queda fora de Catalunya (o el mapa no es pot descarregar), el desplegable manual de les 43 comarques és sempre la sortida.*
+
+![Passa d'opcions del flux de configuració](docs/screenshots/options-flow.png)
+*Fenòmens a seguir, llindar d'avís greu i interval de consulta (en blanc, sondeig adaptatiu).*
+
+![Pàgina del dispositiu amb les entitats](docs/screenshots/device-entities.png)
+*El dispositiu "Avisos Meteocat — Noguera" amb totes les entitats i l'estat real del moment.*
+
+![Sensors de nivell amb els atributs oberts](docs/screenshots/sensor-level.png)
+*`nivell_d_avis` (en vigor ara), `avis_anunciat` (emès, encara no vigent) i `grau_maxim_avui` amb la graella per franges de 6 h.*
+
+![Formulari del blueprint de notificació](docs/screenshots/blueprint-automation.png)
+*El blueprint `avisoscat_warning_notification` vist des de l'editor d'automatitzacions.*
+
 ## Què és un avís SMP, i què no és
 
 El més important per fer-ne bon ús: **l'SMP no és un sistema de temps real.** La immensa
