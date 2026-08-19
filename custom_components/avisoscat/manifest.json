@@ -1,7 +1,9 @@
 {
   "domain": "avisoscat",
   "name": "Avisos Meteocat",
-  "codeowners": ["@pmontp19"],
+  "codeowners": [
+    "@pmontp19"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/pmontp19/ha-avisoscat",
   "integration_type": "service",
@@ -9,5 +11,5 @@
   "issue_tracker": "https://github.com/pmontp19/ha-avisoscat/issues",
   "quality_scale": "silver",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }
