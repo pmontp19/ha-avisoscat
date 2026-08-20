@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>avisoscat — Núvol + exclamació</title>
+  <path d="M33 65 a11.5 11.5 0 0 1 1.6 -22.9 a15.5 15.5 0 0 1 30.1 -4.2 a10.5 10.5 0 0 1 2.1 27.1 Z"
+        fill="none" stroke="#F59E0B" stroke-width="7" stroke-linejoin="round"/>
+  <rect x="48.4" y="42" width="5" height="13" rx="2.5" fill="#B45309"/>
+  <circle cx="50.9" cy="60.5" r="3" fill="#B45309"/>
+</svg>

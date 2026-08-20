@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>avisoscat + cecat — Exploració de logotip</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background: #FAFAFA;
+            color: #1A1A1A;
+            overflow-x: hidden;
+        }
+
+        .font-mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        .logo-card { transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+        .logo-card:hover { transform: translateY(-4px); }
+
+        .logo-canvas {
+            border-radius: 24px;
+            transition: background 0.5s ease, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        body[data-bg="light"] .logo-canvas { background: #FFFFFF; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.07); }
+        body[data-bg="dark"] .logo-canvas { background: #1A1A1A; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+        body[data-bg="checker"] .logo-canvas {
+            background-image:
+                linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%),
+                linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%);
+            background-size: 24px 24px;
+            background-position: 0 0, 12px 12px;
+            background-color: #fff;
+        }
+
+        .logo-aura {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(245,158,11,0.25) 0%, transparent 70%);
+            border-radius: 50%;
+            transform: scale(0.5);
+            opacity: 0;
+            transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+            filter: blur(40px);
+            pointer-events: none;
+        }
+
+        .logo-card:hover .logo-aura { transform: scale(1); opacity: 1; }
+
+        .divider-line {
+            width: 0; height: 1px;
+            background: #1A1A1A;
+            opacity: 0.2;
+            transition: width 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .logo-card:hover .divider-line { width: 100%; }
+
+        .bg-btn {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(0,0,0,0.15);
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .bg-btn.active { background: #1A1A1A; color: #FAFAFA; border-color: #1A1A1A; }
+
+        .badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            padding: 4px 10px;
+            border-radius: 999px;
+        }
+        .badge-rec { background: #F59E0B; color: #451A03; font-weight: 600; }
+        .badge-inst { border: 1px solid rgba(69,26,3,0.35); color: #92400E; }
+        .badge-captain { background: #1D4ED8; color: #EFF6FF; font-weight: 600; }
+        .badge-gov { border: 1px solid rgba(29,78,216,0.45); color: #1E40AF; }
+        .badge-chosen { background: #047857; color: #ECFDF5; font-weight: 600; }
+        .badge-direction { background: #1D4ED8; color: #EFF6FF; font-weight: 600; }
+
+        .tracking-ultra-wide { letter-spacing: 0.2em; }
+        .text-balance { text-wrap: balance; }
+
+        .family-swatch {
+            width: 14px; height: 14px; border-radius: 4px; display: inline-block;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body data-bg="light">
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        const Icon = ({ children }) => (
+            <svg viewBox="0 0 100 100" className="w-full h-full">{children}</svg>
+        );
+
+        /* ============ avisoscat ============ */
+
+        const Av1 = () => (
+            <Icon>
+                <polygon points="50,16 86,79 14,79" fill="none" stroke="#F59E0B" strokeWidth="11" strokeLinejoin="round"/>
+                <path d="M54 37 L44 56 H50.5 L47 67 L58 48 H51 Z" fill="#B45309"/>
+            </Icon>
+        );
+
+        const Av2 = () => (
+            <Icon>
+                <polygon points="50,16 86,79 14,79" fill="none" stroke="#F59E0B" strokeWidth="11" strokeLinejoin="round"/>
+                <path d="M50 35 C50 35 39.5 51 39.5 58.5 A10.5 10.5 0 0 0 60.5 58.5 C60.5 51 50 35 50 35 Z" fill="#B45309"/>
+            </Icon>
+        );
+
+        const TerritoriGrid = ({ base, active, ring }) => (
+            <g>
+                <g fill={base}>
+                    <circle cx="30" cy="24" r="4"/><circle cx="40" cy="24" r="4"/><circle cx="50" cy="24" r="4"/><circle cx="60" cy="24" r="4"/>
+                    <circle cx="20" cy="34" r="4"/><circle cx="30" cy="34" r="4"/><circle cx="40" cy="34" r="4"/><circle cx="50" cy="34" r="4"/><circle cx="60" cy="34" r="4"/><circle cx="70" cy="34" r="4"/>
+                    <circle cx="20" cy="44" r="4"/><circle cx="30" cy="44" r="4"/><circle cx="40" cy="44" r="4"/><circle cx="60" cy="44" r="4"/><circle cx="70" cy="44" r="4"/>
+                    <circle cx="20" cy="54" r="4"/><circle cx="30" cy="54" r="4"/><circle cx="40" cy="54" r="4"/><circle cx="50" cy="54" r="4"/><circle cx="60" cy="54" r="4"/><circle cx="70" cy="54" r="4"/>
+                    <circle cx="30" cy="64" r="4"/><circle cx="40" cy="64" r="4"/><circle cx="50" cy="64" r="4"/><circle cx="60" cy="64" r="4"/><circle cx="70" cy="64" r="4"/>
+                    <circle cx="40" cy="74" r="4"/><circle cx="50" cy="74" r="4"/><circle cx="60" cy="74" r="4"/>
+                </g>
+                <circle cx="50" cy="44" r="5.5" fill={active}/>
+                <circle cx="50" cy="44" r="9.5" fill="none" stroke={ring} strokeWidth={ring === "#F59E0B" ? 2.5 : 3} opacity={ring === "#F59E0B" ? 0.55 : 1}/>
+            </g>
+        );
+
+        const Av3 = () => <Icon><TerritoriGrid base="#8CA0B3" active="#F59E0B" ring="#F59E0B"/></Icon>;
+
+        const Av3a = () => (
+            <Icon>
+                <g fill="#8CA0B3">
+                    <circle cx="26.1" cy="21.8" r="3.7"/><circle cx="36.4" cy="21.8" r="3.7"/><circle cx="46.6" cy="21.8" r="3.7"/><circle cx="56.8" cy="21.8" r="3.7"/>
+                    <circle cx="30.9" cy="29" r="3.7"/><circle cx="39.4" cy="29" r="3.7"/><circle cx="47.9" cy="29" r="3.7"/><circle cx="56.3" cy="29" r="3.7"/><circle cx="64.8" cy="29" r="3.7"/><circle cx="73.3" cy="29" r="3.7"/>
+                    <circle cx="35.6" cy="36.2" r="3.7"/><circle cx="44.4" cy="36.2" r="3.7"/><circle cx="53.3" cy="36.2" r="3.7"/><circle cx="70.9" cy="36.2" r="3.7"/>
+                    <circle cx="40.3" cy="43.4" r="3.7"/><circle cx="49.7" cy="43.4" r="3.7"/><circle cx="59.1" cy="43.4" r="3.7"/><circle cx="68.5" cy="43.4" r="3.7"/>
+                    <circle cx="45" cy="50.6" r="3.7"/><circle cx="55.6" cy="50.6" r="3.7"/><circle cx="66.1" cy="50.6" r="3.7"/>
+                    <circle cx="49.8" cy="57.8" r="3.7"/><circle cx="63.7" cy="57.8" r="3.7"/>
+                    <circle cx="57.9" cy="65" r="3.7"/>
+                </g>
+                <circle cx="62.1" cy="36.2" r="5.5" fill="#F59E0B"/>
+                <circle cx="62.1" cy="36.2" r="9.5" fill="none" stroke="#F59E0B" strokeWidth="2.5" opacity="0.55"/>
+            </Icon>
+        );
+
+        const Av3b = () => (
+            <Icon>
+                <g fill="#8CA0B3">
+                    <rect x="22.3" y="18" width="7.6" height="7.6" rx="2.4"/><rect x="32.6" y="18" width="7.6" height="7.6" rx="2.4"/><rect x="42.8" y="18" width="7.6" height="7.6" rx="2.4"/><rect x="53" y="18" width="7.6" height="7.6" rx="2.4"/>
+                    <rect x="27.1" y="25.2" width="7.6" height="7.6" rx="2.4"/><rect x="35.6" y="25.2" width="7.6" height="7.6" rx="2.4"/><rect x="44.1" y="25.2" width="7.6" height="7.6" rx="2.4"/><rect x="52.5" y="25.2" width="7.6" height="7.6" rx="2.4"/><rect x="61" y="25.2" width="7.6" height="7.6" rx="2.4"/><rect x="69.5" y="25.2" width="7.6" height="7.6" rx="2.4"/>
+                    <rect x="31.8" y="32.4" width="7.6" height="7.6" rx="2.4"/><rect x="40.6" y="32.4" width="7.6" height="7.6" rx="2.4"/><rect x="49.5" y="32.4" width="7.6" height="7.6" rx="2.4"/><rect x="67.1" y="32.4" width="7.6" height="7.6" rx="2.4"/>
+                    <rect x="36.5" y="39.6" width="7.6" height="7.6" rx="2.4"/><rect x="45.9" y="39.6" width="7.6" height="7.6" rx="2.4"/><rect x="55.3" y="39.6" width="7.6" height="7.6" rx="2.4"/><rect x="64.7" y="39.6" width="7.6" height="7.6" rx="2.4"/>
+                    <rect x="41.2" y="46.8" width="7.6" height="7.6" rx="2.4"/><rect x="51.8" y="46.8" width="7.6" height="7.6" rx="2.4"/><rect x="62.3" y="46.8" width="7.6" height="7.6" rx="2.4"/>
+                    <rect x="46" y="54" width="7.6" height="7.6" rx="2.4"/><rect x="59.9" y="54" width="7.6" height="7.6" rx="2.4"/>
+                    <rect x="54.1" y="61.2" width="7.6" height="7.6" rx="2.4"/>
+                </g>
+                <rect x="58.3" y="32.4" width="7.6" height="7.6" rx="2.4" fill="#F59E0B"/>
+                <circle cx="62.1" cy="36.2" r="10" fill="none" stroke="#F59E0B" strokeWidth="2.5" opacity="0.55"/>
+            </Icon>
+        );
+
+        const Av3c = () => (
+            <Icon>
+                <g fill="#8CA0B3">
+                    <rect x="25.1" y="18.6" width="32.7" height="6.4" rx="3.2"/>
+                    <rect x="29.9" y="25.8" width="44.4" height="6.4" rx="3.2"/>
+                    <rect x="34.6" y="33" width="37.3" height="6.4" rx="3.2"/>
+                    <rect x="39.3" y="40.2" width="30.2" height="6.4" rx="3.2"/>
+                    <rect x="44" y="47.4" width="23.1" height="6.4" rx="3.2"/>
+                    <rect x="48.8" y="54.6" width="15.9" height="6.4" rx="3.2"/>
+                    <rect x="53.5" y="61.8" width="8.8" height="6.4" rx="3.2"/>
+                </g>
+                <circle cx="66" cy="36.2" r="5" fill="#F59E0B"/>
+                <circle cx="66" cy="36.2" r="9.5" fill="none" stroke="#F59E0B" strokeWidth="2.5"/>
+            </Icon>
+        );
+
+        const AvTri1 = () => (
+            <Icon>
+                <g transform="rotate(8 50 50)">
+                    <polygon points="17,15 83,15 50,86" fill="none" stroke="#F59E0B" strokeWidth="8.5" strokeLinejoin="round"/>
+                    <g fill="#8CA0B3">
+                        <circle cx="35" cy="26" r="3"/><circle cx="50" cy="26" r="3"/><circle cx="65" cy="26" r="3"/>
+                        <circle cx="39.5" cy="41" r="3"/><circle cx="60.5" cy="41" r="3"/>
+                        <circle cx="50" cy="56" r="3"/>
+                    </g>
+                    <circle cx="50" cy="41" r="4.75" fill="none" stroke="#F59E0B" strokeWidth="2.5"/>
+                </g>
+            </Icon>
+        );
+
+        const AvTri2 = () => (
+            <Icon>
+                <g transform="rotate(8 50 50)">
+                    <polygon points="16,14 84,14 50,86" fill="none" stroke="#F59E0B" strokeWidth="10.5" strokeLinejoin="round"/>
+                    <g fill="#8CA0B3">
+                        <circle cx="36" cy="25" r="3.5"/><circle cx="50" cy="25" r="3.5"/><circle cx="64" cy="25" r="3.5"/>
+                        <circle cx="40" cy="39" r="3.5"/><circle cx="60" cy="39" r="3.5"/>
+                        <circle cx="50" cy="53" r="3.5"/>
+                    </g>
+                    <circle cx="50" cy="39" r="3.6" fill="none" stroke="#F59E0B" strokeWidth="2.2"/>
+                </g>
+            </Icon>
+        );
+
+        const AvTri3 = () => (
+            <Icon>
+                <g transform="rotate(8 50 50)">
+                    <polygon points="17,15 83,15 50,86" fill="none" stroke="#F59E0B" strokeWidth="8" strokeLinejoin="round"/>
+                    <g fill="#8CA0B3">
+                        <circle cx="35" cy="26" r="2.8"/><circle cx="50" cy="26" r="2.8"/><circle cx="65" cy="26" r="2.8"/>
+                        <circle cx="38.5" cy="41" r="2.8"/><circle cx="61.5" cy="41" r="2.8"/>
+                        <circle cx="50" cy="56" r="2.8"/>
+                    </g>
+                    <circle cx="50" cy="41" r="6" fill="none" stroke="#F59E0B" strokeWidth="2.75"/>
+                    <circle cx="50" cy="41" r="2.2" fill="#F59E0B"/>
+                </g>
+            </Icon>
+        );
+
+        const Av4 = () => (
+            <Icon>
+                <g fill="none" stroke="#F59E0B" strokeWidth="6" strokeLinecap="round">
+                    <path d="M36.1 54 A16 16 0 0 1 63.9 54"/>
+                    <path d="M27.5 49 A26 26 0 0 1 72.5 49"/>
+                </g>
+                <path d="M50 40 C50 40 40 55 40 61.5 A10 10 0 0 0 60 61.5 C60 55 50 40 50 40 Z" fill="#B45309"/>
+            </Icon>
+        );
+
+        const Av5 = () => (
+            <Icon>
+                <path d="M33 65 a11.5 11.5 0 0 1 1.6 -22.9 a15.5 15.5 0 0 1 30.1 -4.2 a10.5 10.5 0 0 1 2.1 27.1 Z"
+                      fill="none" stroke="#F59E0B" strokeWidth="7" strokeLinejoin="round"/>
+                <rect x="48.4" y="42" width="5" height="13" rx="2.5" fill="#B45309"/>
+                <circle cx="50.9" cy="60.5" r="3" fill="#B45309"/>
+            </Icon>
+        );
+
+        const Av6 = () => (
+            <Icon>
+                <rect x="38" y="17" width="24" height="66" rx="12" fill="none" stroke="#F59E0B" strokeWidth="7"/>
+                <circle cx="50" cy="33" r="5" fill="#FDE047"/>
+                <circle cx="50" cy="50" r="5" fill="#F59E0B"/>
+                <circle cx="50" cy="67" r="5" fill="#DC2626"/>
+            </Icon>
+        );
+
+        const Av7 = () => (
+            <Icon>
+                <g fill="none" stroke="#8CA0B3" strokeWidth="5">
+                    <circle cx="50" cy="58" r="14"/>
+                    <circle cx="50" cy="58" r="24"/>
+                </g>
+                <circle cx="50" cy="58" r="34" fill="none" stroke="#F59E0B" strokeWidth="6" strokeLinecap="round"
+                        strokeDasharray="120 93.6" transform="rotate(-25 50 58)"/>
+                <circle cx="50" cy="58" r="5.5" fill="#F59E0B"/>
+            </Icon>
+        );
+
+        /* ============ cecat ============ */
+
+        const Escut = ({ children }) => (
+            <path d="M50 13 L83 26 V50 C83 69 69 82.5 50 89 C31 82.5 17 69 17 50 V26 Z"
+                  fill="none" stroke="#2563EB" strokeWidth="9" strokeLinejoin="round"/>
+        );
+
+        const Ce1 = () => (
+            <Icon>
+                <Escut/>
+                <g fill="none" stroke="#1E3A8A" strokeWidth="5" strokeLinecap="round">
+                    <path d="M39.6 44 A12 12 0 0 1 60.4 44"/>
+                    <path d="M32.7 40 A20 20 0 0 1 67.3 40"/>
+                </g>
+                <circle cx="50" cy="50" r="5.5" fill="#1E3A8A"/>
+            </Icon>
+        );
+
+        const Ce2 = () => (
+            <Icon>
+                <Escut/>
+                <path d="M36 53 L46.5 63.5 L66 41" fill="none" stroke="#1E3A8A" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+            </Icon>
+        );
+
+        const Ce3 = () => (
+            <Icon>
+                <rect x="28" y="56" width="12" height="22" rx="6" fill="#93C5FD"/>
+                <rect x="44" y="42" width="12" height="36" rx="6" fill="#2563EB"/>
+                <rect x="60" y="28" width="12" height="50" rx="6" fill="#F97316"/>
+            </Icon>
+        );
+
+        const Ce4 = () => (
+            <Icon>
+                <defs>
+                    <polygon id="hx" points="0,-10 -8.66,-5 -8.66,5 0,10 8.66,5 8.66,-5"/>
+                </defs>
+                <g fill="none" stroke="#2563EB" strokeWidth="4.5" strokeLinejoin="round">
+                    <use href="#hx" x="67.3" y="52"/>
+                    <use href="#hx" x="58.7" y="67"/>
+                    <use href="#hx" x="41.3" y="67"/>
+                    <use href="#hx" x="32.7" y="52"/>
+                    <use href="#hx" x="41.3" y="37"/>
+                    <use href="#hx" x="58.7" y="37"/>
+                </g>
+                <use href="#hx" x="50" y="52" fill="#F97316"/>
+            </Icon>
+        );
+
+        const Ce5 = () => <Icon><TerritoriGrid base="#93B0D8" active="#2563EB" ring="#F97316"/></Icon>;
+
+        const Ce6 = () => (
+            <Icon>
+                <Escut/>
+                <polygon points="50,38 66,66 34,66" fill="#F97316" stroke="#F97316" strokeWidth="6" strokeLinejoin="round"/>
+            </Icon>
+        );
+
+        const Ce7 = () => (
+            <Icon>
+                <rect x="14" y="14" width="72" height="72" rx="17" fill="#F97316"/>
+                <polygon points="50,30 70,64.5 30,64.5" fill="#2563EB" stroke="#2563EB" strokeWidth="7" strokeLinejoin="round"/>
+            </Icon>
+        );
+
+        const Ce8 = () => (
+            <Icon>
+                <path d="M50 13 L83 26 V50 C83 69 69 82.5 50 89 C31 82.5 17 69 17 50 V26 Z" fill="#F97316"/>
+                <g fill="#C8102E">
+                    <rect x="32.5" y="28" width="5" height="14" rx="2.5"/>
+                    <rect x="42.5" y="28" width="5" height="14" rx="2.5"/>
+                    <rect x="52.5" y="28" width="5" height="14" rx="2.5"/>
+                    <rect x="62.5" y="28" width="5" height="14" rx="2.5"/>
+                </g>
+                <path d="M38.5 63.5 A11.5 11.5 0 0 1 61.5 63.5" fill="none" stroke="#1E3A8A" strokeWidth="4.5" strokeLinecap="round"/>
+                <circle cx="50" cy="63.5" r="5.5" fill="#1E3A8A"/>
+            </Icon>
+        );
+
+        /* ============ data ============ */
+
+        const avisoscat = [
+            { id: "av1", Component: Av1, title: "Perill + llamp", subtitle: "triangle arrodonit · llamp",
+              philosophy: "El triangle SMP de la Meteocat amb el llamp a dins: perill meteorològic immediat, llegible fins a 16 px.",
+              recommended: true, installed: true },
+            { id: "av2", Component: Av2, title: "Perill + ruixat", subtitle: "triangle arrodonit · gota",
+              philosophy: "Mateixa família de triangle, glif de pluja: la cara més habitual dels avisos (ruixats i temporals).",
+              recommended: true },
+            { id: "av3", Component: Av3, title: "Comarca activa (v0)", subtitle: "matriu de punts · graella inicial",
+              philosophy: "La primera graella quadrada no llegia com Catalunya; es conserva per comparar-la amb les iteracions AV3a-c (perfil pirineu-delta).",
+              recommended: false },
+            { id: "av3a", Component: Av3a, title: "Triangle comarcal", subtitle: "punts · base pirinenca → delta",
+              philosophy: "La graella segueix la silueta de Catalunya: base ampla dels Pirineus al nord, hipotenusa de costa fins al delta; comarca activa amb anell.",
+              recommended: true, captain: true },
+            { id: "av3b", Component: Av3b, title: "Mosaic comarcal", subtitle: "mosaic · base pirinenca → delta",
+              philosophy: "Mateixa silueta triangular amb peces de mosaic: les comarques com a tessel·les del territori, la teva il·luminada.",
+              recommended: false, captain: true },
+            { id: "av3c", Component: Av3c, title: "Bandes del territori", subtitle: "bandes · pirineu a delta · supersedida",
+              philosophy: "Reducció màxima: bandes que s'estrenyen de nord a sud, el territori abstracte amb el pols d'alerta a la costa.",
+              recommended: false, captain: true },
+            { id: "av-tri1", Component: AvTri1, title: "Triangle + matriu I", subtitle: "triangle Catalunya · matriu 3-2-1 · anell al centroide",
+              philosophy: "La direcció final del capità: triangle que llegeix com Catalunya (inclinat a llevant), matriu de comarques 3-2-1 i l'anell de la comarca vigilada al centroide exacte. Pes clàssic.",
+              recommended: false, direction: true },
+            { id: "av-tri2", Component: AvTri2, title: "Triangle + matriu II", subtitle: "mateix concepte · traç i punts pesats",
+              philosophy: "Iteració de pes: triangle i punts més gruixuts, anell compacte. Més presència a mida petita, menys aire.",
+              recommended: false, direction: true },
+            { id: "av-tri3", Component: AvTri3, title: "Triangle + matriu III", subtitle: "mateix concepte · anell destacat amb punt",
+              philosophy: "Iteració d'anell: anell més ampli amb punt al centre (la comarca dins l'anell de vigilància), matriu fina.",
+              recommended: false, direction: true },
+            { id: "av4", Component: Av4, title: "Ona de perill", subtitle: "arcs d'alerta · gota",
+              philosophy: "La gota emet ones d'avís: el meteor és el focus, l'alerta es irradia cap al territori.",
+              recommended: false },
+            { id: "av5", Component: Av5, title: "Núvol + exclamació", subtitle: "núvol · signe!",
+              philosophy: "Evolució directa de la icona actual: el marcador de posició (!) es converteix en núvol amb exclamació.",
+              recommended: false },
+            { id: "av6", Component: Av6, title: "Semàfor de nivells", subtitle: "càpsula · 3 nivells",
+              philosophy: "Els tres nivells d'avís de la SMP (groc, taronja, vermell) en vertical: l'estat de la comarca d'un cop d'ull.",
+              recommended: false },
+            { id: "av7", Component: Av7, title: "Radar comarcal", subtitle: "anells · escombrada",
+              philosophy: "Radar sobre el territori: un sector de l'anell exterior s'encén amb el nivell d'avís vigent.",
+              recommended: false },
+        ];
+
+        const cecat = [
+            { id: "ce7", Component: Ce7, title: "Senyal internacional", subtitle: "quadre taronja · triangle blau",
+              philosophy: "El senyal oficial de protecció civil (triangle blau sobre quadre taronja): reconeixement universal, família del triangle d'avisoscat.",
+              recommended: true, chosen: true },
+            { id: "ce1", Component: Ce1, title: "Escut + balisa", subtitle: "escut · ones d'activació",
+              philosophy: "L'escut de protecció civil amb una balisa emetent: un pla s'ha activat i l'avís s'irradia.",
+              recommended: true },
+            { id: "ce2", Component: Ce2, title: "Escut + verificació", subtitle: "escut · check",
+              philosophy: "Escut amb verificació: la resposta organitzada que conté l'emergència i la resol.",
+              recommended: false },
+            { id: "ce3", Component: Ce3, title: "Esgraó de fases", subtitle: "3 barres · escalat",
+              philosophy: "Prealerta, alerta, emergència: tres barres ascendents per l'escalat de fases dels plans.",
+              recommended: false },
+            { id: "ce4", Component: Ce4, title: "Pla activat", subtitle: "rusc de plans · hexàgon",
+              philosophy: "Els plans (INUNCAT, VENTCAT, NEUCAT...) com a bresca: un hexàgon s'encén quan el pla s'activa.",
+              recommended: false },
+            { id: "ce5", Component: Ce5, title: "Pols al territori", subtitle: "comarques · pols",
+              philosophy: "Bessó de l'AV3 d'avisoscat: mateix mapa de punts, però amb pols taronja d'activació sobre blau.",
+              recommended: false },
+            { id: "ce6", Component: Ce6, title: "Perill contingut", subtitle: "escut · triangle",
+              philosophy: "El triangle de perill contingut dins l'escut: l'emergència existeix, la protecció civil l'estructura.",
+              recommended: false },
+            { id: "ce8", Component: Ce8, title: "Protecció Civil · homenatge", subtitle: "escut taronja · senyera · balisa",
+              philosophy: "Adaptació de la identitat pública de Protecció Civil de la Generalitat (escut taronja, quatre barres vermelles de senyera) amb la nostra balisa d'activació: homenatge, mai còpia del logotip oficial.",
+              recommended: false, gov: true },
+        ];
+
+        const Family = ({ name, tagline, swatches, logos, note }) => (
+            <section className="w-full max-w-7xl mb-32">
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-14">
+                    <div>
+                        <h2 className="text-4xl font-extralight tracking-wider">{name}</h2>
+                        <p className="font-mono text-xs opacity-40 uppercase tracking-ultra-wide mt-3">{tagline}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            {swatches.map((c, i) => <span key={i} className="family-swatch" style={{ background: c }}></span>)}
+                        </div>
+                        <p className="font-mono text-[10px] opacity-50 max-w-[220px] text-right leading-relaxed">{note}</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
+                    {logos.map((logo, index) => (
+                        <div key={index} className="flex flex-col items-center logo-card cursor-pointer">
+                            <div className="w-64 h-64 mb-10 flex items-center justify-center relative">
+                                <div className="logo-aura"></div>
+                                <div className="w-36 h-36 relative z-10 logo-canvas p-2">
+                                    <logo.Component />
+                                </div>
+                            </div>
+                            <div className="text-center w-full px-4">
+                                <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
+                                    <h3 className="text-xl font-medium tracking-wider uppercase">{logo.title}</h3>
+                                    {logo.recommended && !logo.chosen && <span className="badge badge-rec">Recomanat</span>}
+                                    {logo.installed && <span className="badge badge-inst">Instal·lat en aquest PR</span>}
+                                    {logo.captain && <span className="badge badge-captain">Capità: iterant</span>}
+                                    {logo.gov && <span className="badge badge-gov">Referència governamental</span>}
+                                    {logo.chosen && <span className="badge badge-chosen">Escollit</span>}
+                                    {logo.direction && <span className="badge badge-direction">Direcció del capità</span>}
+                                </div>
+                                <h4 className="text-xs font-mono opacity-50 tracking-widest mb-6">{logo.subtitle}</h4>
+                                <p className="text-sm leading-relaxed opacity-70 text-left font-light text-balance">{logo.philosophy}</p>
+                            </div>
+                            <div className="divider-line mt-8 mx-auto"></div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        );
+
+        const LogoShowcase = () => {
+            const [bg, setBg] = useState("light");
+
+            const setTheme = (mode) => {
+                setBg(mode);
+                document.body.dataset.bg = mode;
+                document.body.style.background = mode === "dark" ? "#111111" : "#FAFAFA";
+                document.body.style.color = mode === "dark" ? "#EDEDED" : "#1A1A1A";
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col items-center py-20 px-6">
+
+                    {/* Header */}
+                    <div className="text-center mb-10 max-w-3xl">
+                        <h1 className="text-6xl md:text-7xl font-extralight tracking-wider mb-6">
+                            avisoscat <span className="opacity-30 font-extralight">+</span> cecat
+                        </h1>
+                        <p className="font-mono text-xs opacity-40 uppercase tracking-ultra-wide mb-8">
+                            Exploració de logotip · família de marques · Home Assistant
+                        </p>
+                        <div className="w-12 h-[1px] bg-current mx-auto opacity-30"></div>
+                        <p className="mt-8 text-sm font-light opacity-60 leading-relaxed max-w-xl mx-auto text-balance">
+                            Dues integracions germanes: el mateix llenguatge visual (triangles arrodonits,
+                            traç gruixut, un sol color de marca) amb rols diferents. Avisoscat mira el cel
+                            (ambre, perill meteo per comarca); cecat mira la resposta (blau i taronja,
+                            plans de protecció civil). El capità tria; hi ha dos recomanats per família.
+                        </p>
+                    </div>
+
+                    {/* Background switcher */}
+                    <div className="flex items-center gap-3 mb-24">
+                        <span className="font-mono text-[10px] opacity-40 uppercase tracking-ultra-wide">Fons:</span>
+                        <button className={"bg-btn " + (bg === "light" ? "active" : "")} onClick={() => setTheme("light")}>Clar</button>
+                        <button className={"bg-btn " + (bg === "dark" ? "active" : "")} onClick={() => setTheme("dark")}>Fosc</button>
+                        <button className={"bg-btn " + (bg === "checker" ? "active" : "")} onClick={() => setTheme("checker")}>Transparència</button>
+                    </div>
+
+                    <Family
+                        name="avisoscat"
+                        tagline="Avisos meteorològics de la Meteocat · SMP per comarca"
+                        swatches={["#F59E0B", "#B45309", "#8CA0B3"]}
+                        note="Ambre SMP + àmbar profund. PNG a custom_components/avisoscat/brand/"
+                        logos={avisoscat}
+                    />
+
+                    <Family
+                        name="cecat"
+                        tagline="Plans de protecció civil de Catalunya · INUNCAT · VENTCAT · NEUCAT"
+                        swatches={["#F97316", "#2563EB", "#1E3A8A"]}
+                        note="Taronja d'activació + blau institucional. CE7 escollit pel capità; PNG a docs/logo-showcase/png/cecat/"
+                        logos={cecat}
+                    />
+
+                    {/* Footer */}
+                    <div className="mt-16 max-w-2xl text-center">
+                        <p className="font-mono text-xs opacity-40 uppercase tracking-ultra-wide leading-loose">
+                            Generat amb logo-generator · SVG a docs/logo-showcase/svg · 2026
+                        </p>
+                        <p className="mt-6 text-[11px] font-light opacity-50 leading-relaxed max-w-xl mx-auto">
+                            Nota de llicència: CE8 és un homenatge adaptat a la identitat pública de Protecció
+                            Civil (Generalitat de Catalunya); no és ni reprodueix el logotip oficial. La resta de
+                            variants són obres originals d'aquest repositori.
+                        </p>
+                    </div>
+
+                </div>
+            );
+        };
+
+        ReactDOM.render(<LogoShowcase />, document.getElementById('root'));
+    </script>
+
+</body>
+</html>

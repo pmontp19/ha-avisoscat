@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>cecat — Pols al territori</title>
+  <g fill="#93B0D8">
+    <circle cx="30" cy="24" r="4"/><circle cx="40" cy="24" r="4"/><circle cx="50" cy="24" r="4"/><circle cx="60" cy="24" r="4"/>
+    <circle cx="20" cy="34" r="4"/><circle cx="30" cy="34" r="4"/><circle cx="40" cy="34" r="4"/><circle cx="50" cy="34" r="4"/><circle cx="60" cy="34" r="4"/><circle cx="70" cy="34" r="4"/>
+    <circle cx="20" cy="44" r="4"/><circle cx="30" cy="44" r="4"/><circle cx="40" cy="44" r="4"/><circle cx="60" cy="44" r="4"/><circle cx="70" cy="44" r="4"/>
+    <circle cx="20" cy="54" r="4"/><circle cx="30" cy="54" r="4"/><circle cx="40" cy="54" r="4"/><circle cx="50" cy="54" r="4"/><circle cx="60" cy="54" r="4"/><circle cx="70" cy="54" r="4"/>
+    <circle cx="30" cy="64" r="4"/><circle cx="40" cy="64" r="4"/><circle cx="50" cy="64" r="4"/><circle cx="60" cy="64" r="4"/><circle cx="70" cy="64" r="4"/>
+    <circle cx="40" cy="74" r="4"/><circle cx="50" cy="74" r="4"/><circle cx="60" cy="74" r="4"/>
+  </g>
+  <circle cx="50" cy="44" r="5" fill="#2563EB"/>
+  <circle cx="50" cy="44" r="9.5" fill="none" stroke="#F97316" stroke-width="3"/>
+</svg>

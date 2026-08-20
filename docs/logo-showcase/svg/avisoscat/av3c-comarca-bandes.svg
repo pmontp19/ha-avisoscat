@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>avisoscat — Bandes del territori</title>
+  <g fill="#8CA0B3">
+    <rect x="25.1" y="18.6" width="32.7" height="6.4" rx="3.2"/>
+    <rect x="29.9" y="25.8" width="44.4" height="6.4" rx="3.2"/>
+    <rect x="34.6" y="33.0" width="37.3" height="6.4" rx="3.2"/>
+    <rect x="39.3" y="40.199999999999996" width="30.2" height="6.4" rx="3.2"/>
+    <rect x="44.0" y="47.4" width="23.1" height="6.4" rx="3.2"/>
+    <rect x="48.8" y="54.599999999999994" width="15.9" height="6.4" rx="3.2"/>
+    <rect x="53.5" y="61.8" width="8.8" height="6.4" rx="3.2"/>
+  </g>
+  <circle cx="66" cy="36.2" r="5" fill="#F59E0B"/>
+  <circle cx="66" cy="36.2" r="9.5" fill="none" stroke="#F59E0B" stroke-width="2.5"/>
+</svg>
