@@ -11,5 +11,8 @@ when a repository neither ships `brand/icon.png` nor is listed in the (closed)
 brands repository.
 
 The artwork is the Situació Meteorològica de Perill warning triangle: an amber
-rounded triangle with a white exclamation mark, which stays legible down to
-16 px on both light and dark backgrounds.
+rounded triangle (deep-amber stroke family) with a deep-amber lightning bolt,
+which stays legible down to 16 px on both light and dark backgrounds. The
+exploration grid it came from (7 SVG variants per integration, shared visual
+family with `ha-cecat`) lives in `docs/logo-showcase/`; regenerate the PNGs
+from the SVGs there with the `logo-generator` skill's `svg_to_png.py`.
