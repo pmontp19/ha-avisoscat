@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>cecat — Escut + verificació</title>
+  <path d="M50 13 L83 26 V50 C83 69 69 82.5 50 89 C31 82.5 17 69 17 50 V26 Z"
+        fill="none" stroke="#2563EB" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M36 53 L46.5 63.5 L66 41" fill="none" stroke="#1E3A8A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

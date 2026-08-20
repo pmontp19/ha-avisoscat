@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>cecat — Escut + balisa</title>
+  <path d="M50 13 L83 26 V50 C83 69 69 82.5 50 89 C31 82.5 17 69 17 50 V26 Z"
+        fill="none" stroke="#2563EB" stroke-width="9" stroke-linejoin="round"/>
+  <g fill="none" stroke="#1E3A8A" stroke-width="5" stroke-linecap="round">
+    <path d="M39.6 44 A12 12 0 0 1 60.4 44"/>
+    <path d="M32.7 40 A20 20 0 0 1 67.3 40"/>
+  </g>
+  <circle cx="50" cy="50" r="5.5" fill="#1E3A8A"/>
+</svg>

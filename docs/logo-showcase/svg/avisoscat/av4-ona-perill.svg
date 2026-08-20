@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>avisoscat — Ona de perill</title>
+  <g fill="none" stroke="#F59E0B" stroke-width="6" stroke-linecap="round">
+    <path d="M36.1 54 A16 16 0 0 1 63.9 54"/>
+    <path d="M27.5 49 A26 26 0 0 1 72.5 49"/>
+  </g>
+  <path d="M50 40 C50 40 40 55 40 61.5 A10 10 0 0 0 60 61.5 C60 55 50 40 50 40 Z" fill="#B45309"/>
+</svg>
