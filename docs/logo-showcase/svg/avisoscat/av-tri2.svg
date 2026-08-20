@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <title>avisoscat — Triangle + matriu II (pes)</title>
+  <g transform="rotate(8 50 50)">
+    <polygon points="16,14 84,14 50,86" fill="none" stroke="#F59E0B" stroke-width="10.5" stroke-linejoin="round"/>
+    <g fill="#8CA0B3">
+      <circle cx="36" cy="25" r="3.5"/>
+      <circle cx="50" cy="25" r="3.5"/>
+      <circle cx="64" cy="25" r="3.5"/>
+      <circle cx="40" cy="39" r="3.5"/>
+      <circle cx="60" cy="39" r="3.5"/>
+      <circle cx="50" cy="53" r="3.5"/>
+    </g>
+    <circle cx="50" cy="39" r="3.6" fill="none" stroke="#F59E0B" stroke-width="2.2"/>
+  </g>
+</svg>

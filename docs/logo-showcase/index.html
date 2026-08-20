@@ -104,6 +104,8 @@
         .badge-inst { border: 1px solid rgba(69,26,3,0.35); color: #92400E; }
         .badge-captain { background: #1D4ED8; color: #EFF6FF; font-weight: 600; }
         .badge-gov { border: 1px solid rgba(29,78,216,0.45); color: #1E40AF; }
+        .badge-chosen { background: #047857; color: #ECFDF5; font-weight: 600; }
+        .badge-direction { background: #1D4ED8; color: #EFF6FF; font-weight: 600; }
 
         .tracking-ultra-wide { letter-spacing: 0.2em; }
         .text-balance { text-wrap: balance; }
@@ -203,6 +205,49 @@
                 </g>
                 <circle cx="66" cy="36.2" r="5" fill="#F59E0B"/>
                 <circle cx="66" cy="36.2" r="9.5" fill="none" stroke="#F59E0B" strokeWidth="2.5"/>
+            </Icon>
+        );
+
+        const AvTri1 = () => (
+            <Icon>
+                <g transform="rotate(8 50 50)">
+                    <polygon points="17,15 83,15 50,86" fill="none" stroke="#F59E0B" strokeWidth="8.5" strokeLinejoin="round"/>
+                    <g fill="#8CA0B3">
+                        <circle cx="35" cy="26" r="3"/><circle cx="50" cy="26" r="3"/><circle cx="65" cy="26" r="3"/>
+                        <circle cx="39.5" cy="41" r="3"/><circle cx="60.5" cy="41" r="3"/>
+                        <circle cx="50" cy="56" r="3"/>
+                    </g>
+                    <circle cx="50" cy="41" r="4.75" fill="none" stroke="#F59E0B" strokeWidth="2.5"/>
+                </g>
+            </Icon>
+        );
+
+        const AvTri2 = () => (
+            <Icon>
+                <g transform="rotate(8 50 50)">
+                    <polygon points="16,14 84,14 50,86" fill="none" stroke="#F59E0B" strokeWidth="10.5" strokeLinejoin="round"/>
+                    <g fill="#8CA0B3">
+                        <circle cx="36" cy="25" r="3.5"/><circle cx="50" cy="25" r="3.5"/><circle cx="64" cy="25" r="3.5"/>
+                        <circle cx="40" cy="39" r="3.5"/><circle cx="60" cy="39" r="3.5"/>
+                        <circle cx="50" cy="53" r="3.5"/>
+                    </g>
+                    <circle cx="50" cy="39" r="3.6" fill="none" stroke="#F59E0B" strokeWidth="2.2"/>
+                </g>
+            </Icon>
+        );
+
+        const AvTri3 = () => (
+            <Icon>
+                <g transform="rotate(8 50 50)">
+                    <polygon points="17,15 83,15 50,86" fill="none" stroke="#F59E0B" strokeWidth="8" strokeLinejoin="round"/>
+                    <g fill="#8CA0B3">
+                        <circle cx="35" cy="26" r="2.8"/><circle cx="50" cy="26" r="2.8"/><circle cx="65" cy="26" r="2.8"/>
+                        <circle cx="38.5" cy="41" r="2.8"/><circle cx="61.5" cy="41" r="2.8"/>
+                        <circle cx="50" cy="56" r="2.8"/>
+                    </g>
+                    <circle cx="50" cy="41" r="6" fill="none" stroke="#F59E0B" strokeWidth="2.75"/>
+                    <circle cx="50" cy="41" r="2.2" fill="#F59E0B"/>
+                </g>
             </Icon>
         );
 
@@ -344,9 +389,18 @@
             { id: "av3b", Component: Av3b, title: "Mosaic comarcal", subtitle: "mosaic · base pirinenca → delta",
               philosophy: "Mateixa silueta triangular amb peces de mosaic: les comarques com a tessel·les del territori, la teva il·luminada.",
               recommended: false, captain: true },
-            { id: "av3c", Component: Av3c, title: "Bandes del territori", subtitle: "bandes · pirineu a delta",
+            { id: "av3c", Component: Av3c, title: "Bandes del territori", subtitle: "bandes · pirineu a delta · supersedida",
               philosophy: "Reducció màxima: bandes que s'estrenyen de nord a sud, el territori abstracte amb el pols d'alerta a la costa.",
               recommended: false, captain: true },
+            { id: "av-tri1", Component: AvTri1, title: "Triangle + matriu I", subtitle: "triangle Catalunya · matriu 3-2-1 · anell al centroide",
+              philosophy: "La direcció final del capità: triangle que llegeix com Catalunya (inclinat a llevant), matriu de comarques 3-2-1 i l'anell de la comarca vigilada al centroide exacte. Pes clàssic.",
+              recommended: false, direction: true },
+            { id: "av-tri2", Component: AvTri2, title: "Triangle + matriu II", subtitle: "mateix concepte · traç i punts pesats",
+              philosophy: "Iteració de pes: triangle i punts més gruixuts, anell compacte. Més presència a mida petita, menys aire.",
+              recommended: false, direction: true },
+            { id: "av-tri3", Component: AvTri3, title: "Triangle + matriu III", subtitle: "mateix concepte · anell destacat amb punt",
+              philosophy: "Iteració d'anell: anell més ampli amb punt al centre (la comarca dins l'anell de vigilància), matriu fina.",
+              recommended: false, direction: true },
             { id: "av4", Component: Av4, title: "Ona de perill", subtitle: "arcs d'alerta · gota",
               philosophy: "La gota emet ones d'avís: el meteor és el focus, l'alerta es irradia cap al territori.",
               recommended: false },
@@ -363,8 +417,8 @@
 
         const cecat = [
             { id: "ce7", Component: Ce7, title: "Senyal internacional", subtitle: "quadre taronja · triangle blau",
-              philosophy: "El senyal oficial de protecció civil (triangle blau sobre quadre taronja): reconeixement universal, famili del triangle d'avisoscat.",
-              recommended: true, installed: false, topPick: true },
+              philosophy: "El senyal oficial de protecció civil (triangle blau sobre quadre taronja): reconeixement universal, família del triangle d'avisoscat.",
+              recommended: true, chosen: true },
             { id: "ce1", Component: Ce1, title: "Escut + balisa", subtitle: "escut · ones d'activació",
               philosophy: "L'escut de protecció civil amb una balisa emetent: un pla s'ha activat i l'avís s'irradia.",
               recommended: true },
@@ -414,10 +468,12 @@
                             <div className="text-center w-full px-4">
                                 <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
                                     <h3 className="text-xl font-medium tracking-wider uppercase">{logo.title}</h3>
-                                    {logo.recommended && <span className="badge badge-rec">Recomanat</span>}
+                                    {logo.recommended && !logo.chosen && <span className="badge badge-rec">Recomanat</span>}
                                     {logo.installed && <span className="badge badge-inst">Instal·lat en aquest PR</span>}
                                     {logo.captain && <span className="badge badge-captain">Capità: iterant</span>}
                                     {logo.gov && <span className="badge badge-gov">Referència governamental</span>}
+                                    {logo.chosen && <span className="badge badge-chosen">Escollit</span>}
+                                    {logo.direction && <span className="badge badge-direction">Direcció del capità</span>}
                                 </div>
                                 <h4 className="text-xs font-mono opacity-50 tracking-widest mb-6">{logo.subtitle}</h4>
                                 <p className="text-sm leading-relaxed opacity-70 text-left font-light text-balance">{logo.philosophy}</p>
@@ -479,7 +535,7 @@
                         name="cecat"
                         tagline="Plans de protecció civil de Catalunya · INUNCAT · VENTCAT · NEUCAT"
                         swatches={["#F97316", "#2563EB", "#1E3A8A"]}
-                        note="Taronja d'activació + blau institucional. PNGs candidats a docs/logo-showcase/png/cecat/"
+                        note="Taronja d'activació + blau institucional. CE7 escollit pel capità; PNG a docs/logo-showcase/png/cecat/"
                         logos={cecat}
                     />
 
